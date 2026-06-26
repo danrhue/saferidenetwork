@@ -1,3 +1,4 @@
+import { isPersonalDetailsStepComplete } from '@/lib/driver/wizard-step-completion';
 import { hasProfilePhotoForOnboarding } from '@/lib/profile-photo';
 
 export type PersonalProfile = Record<string, unknown>;
@@ -30,7 +31,7 @@ export function calculateDriverCompletion(
       hasValue(profile, 'physical_state') &&
       mailingOk,
     hasValue(profile, 'drivers_license_number') && hasValue(profile, 'drivers_license_state'),
-    hasValue(profile, 'dob_year') && hasValue(profile, 'ssn'),
+    isPersonalDetailsStepComplete(profile),
     hasValue(profile, 'emergency_contact_first_name') &&
       hasValue(profile, 'emergency_contact_phone'),
     hasProfilePhotoForOnboarding(profile),

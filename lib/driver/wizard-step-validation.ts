@@ -53,9 +53,21 @@ export function validateDateOfBirth(
   return null;
 }
 
+export function ssnRequiresVerification(
+  profile: WizardProfileInput,
+  savedSsnBaseline: string
+): boolean {
+  const ssn = normalizeSsn(profile.ssn);
+  const baseline = normalizeSsn(savedSsnBaseline);
+  if (!isValidSsn(ssn)) return true;
+  if (!baseline) return true;
+  return ssn !== baseline;
+}
+
 export function validatePersonalDetailsStep(
   profile: WizardProfileInput,
-  ssnVerify: string
+  ssnVerify: string,
+  options?: { savedSsnBaseline?: string }
 ): Record<string, string> {
   const errors: Record<string, string> = {};
 
@@ -71,11 +83,14 @@ export function validatePersonalDetailsStep(
     errors.ssn = 'Enter a valid 9-digit Social Security Number.';
   }
 
-  const verify = normalizeSsn(ssnVerify);
-  if (!verify) {
-    errors.ssn_verify = 'Please re-enter your Social Security Number to verify.';
-  } else if (ssn && verify !== ssn) {
-    errors.ssn_verify = 'Social Security Numbers do not match.';
+  const needsVerify = ssnRequiresVerification(profile, options?.savedSsnBaseline ?? '');
+  if (needsVerify) {
+    const verify = normalizeSsn(ssnVerify);
+    if (!verify) {
+      errors.ssn_verify = 'Please re-enter your Social Security Number to verify.';
+    } else if (ssn && verify !== ssn) {
+      errors.ssn_verify = 'Social Security Numbers do not match.';
+    }
   }
 
   if (!String(profile.hair_color ?? '').trim()) {

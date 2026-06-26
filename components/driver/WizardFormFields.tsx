@@ -186,6 +186,8 @@ export function SsnFields({
   onSsnVerifyChange,
   ssnError,
   ssnVerifyError,
+  showVerify = true,
+  ssnOnFile = false,
 }: {
   ssn: string;
   ssnVerify: string;
@@ -193,35 +195,53 @@ export function SsnFields({
   onSsnVerifyChange: (value: string) => void;
   ssnError?: string;
   ssnVerifyError?: string;
+  showVerify?: boolean;
+  ssnOnFile?: boolean;
 }) {
   const handleSsnInput = (value: string, setter: (next: string) => void) => {
     setter(value.replace(/\D/g, '').slice(0, 9));
   };
 
   return (
-    <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-      <FormInput
-        label="Social Security Number *"
-        type="password"
-        inputMode="numeric"
-        autoComplete="off"
-        value={ssn}
-        onChange={(value) => handleSsnInput(value, onSsnChange)}
-        maxLength={9}
-        hint="9 digits. Your entry is masked for security."
-        error={ssnError}
-      />
-      <FormInput
-        label="Verify Social Security Number *"
-        type="password"
-        inputMode="numeric"
-        autoComplete="off"
-        value={ssnVerify}
-        onChange={(value) => handleSsnInput(value, onSsnVerifyChange)}
-        maxLength={9}
-        hint="Re-enter your SSN to confirm."
-        error={ssnVerifyError}
-      />
+    <div className="space-y-4">
+      {ssnOnFile && (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+          Social Security Number saved securely. Change the field below only if you need to update
+          it.
+        </div>
+      )}
+      <div
+        className={`grid grid-cols-1 gap-6 ${showVerify ? 'md:grid-cols-2' : 'max-w-md'}`}
+      >
+        <FormInput
+          label="Social Security Number *"
+          type="password"
+          inputMode="numeric"
+          autoComplete="off"
+          value={ssn}
+          onChange={(value) => handleSsnInput(value, onSsnChange)}
+          maxLength={9}
+          hint={
+            showVerify
+              ? '9 digits. Your entry is masked for security.'
+              : '9 digits on file. Edit to change your saved SSN.'
+          }
+          error={ssnError}
+        />
+        {showVerify && (
+          <FormInput
+            label="Verify Social Security Number *"
+            type="password"
+            inputMode="numeric"
+            autoComplete="off"
+            value={ssnVerify}
+            onChange={(value) => handleSsnInput(value, onSsnVerifyChange)}
+            maxLength={9}
+            hint="Re-enter your SSN to confirm."
+            error={ssnVerifyError}
+          />
+        )}
+      </div>
     </div>
   );
 }

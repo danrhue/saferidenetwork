@@ -17,7 +17,7 @@ import {
 import {
   WIZARD_PERSONAL_SAVE_STEPS,
   clampWizardStep,
-  resolveInitialWizardStep,
+  resolveWizardResumeStep,
 } from '@/lib/driver/wizard-steps';
 import ProfilePhotoRejectionPanel from '@/components/driver/ProfilePhotoRejectionPanel';
 import {
@@ -130,16 +130,6 @@ export default function DriverProfile() {
 
       setProfile(profileData);
 
-      const initialStep = resolveInitialWizardStep(
-        searchParams.get('step'),
-        prof?.onboarding_wizard_step as number | undefined
-      );
-      setSavedWizardStep(initialStep);
-
-      if (!searchParams.get('step') && prof?.onboarding_wizard_step) {
-        router.replace(`/dashboard/profile?step=${initialStep}`, { scroll: false });
-      }
-
       if (prof) {
         setVehicleYear(prof.vehicle_year ? String(prof.vehicle_year) : '');
         setVehicleMake(prof.vehicle_make || '');
@@ -167,15 +157,51 @@ export default function DriverProfile() {
         setVehiclePhotoUrls(signed.filter(Boolean) as string[]);
       }
 
-      const docsRes = await fetch('/api/driver/documents', { cache: 'no-store' });
+      const [docsRes, reqDocsRes] = await Promise.all([
+        fetch('/api/driver/documents', { cache: 'no-store' }),
+        fetch('/api/driver/required-documents', { cache: 'no-store' }),
+      ]);
+
+      let docsUploaded = 0;
       if (docsRes.ok) {
         const docs = await docsRes.json();
         if (Array.isArray(docs)) {
           const types = new Set(
             docs.map((d: { document_type: string }) => d.document_type)
           );
-          setDocumentsUploaded(types.size);
+          docsUploaded = types.size;
+          setDocumentsUploaded(docsUploaded);
         }
+      }
+
+      let docsRequired = 0;
+      if (reqDocsRes.ok) {
+        const reqData = await reqDocsRes.json();
+        if (Array.isArray(reqData.documents)) {
+          docsRequired = reqData.documents.filter(
+            (d: { uploadable?: boolean }) => d.uploadable
+          ).length;
+        }
+      }
+
+      const resumeProfile = {
+        ...profileData,
+        vehicle_year: prof?.vehicle_year ?? null,
+        vehicle_make: prof?.vehicle_make ?? null,
+        vehicle_model: prof?.vehicle_model ?? null,
+        passenger_capacity: prof?.passenger_capacity ?? null,
+      };
+
+      const initialStep = resolveWizardResumeStep(
+        searchParams.get('step'),
+        prof?.onboarding_wizard_step as number | undefined,
+        resumeProfile,
+        { documentsUploaded: docsUploaded, documentsRequired: docsRequired }
+      );
+      setSavedWizardStep(initialStep);
+
+      if (!searchParams.get('step')) {
+        router.replace(`/dashboard/profile?step=${initialStep}`, { scroll: false });
       }
 
       setLoading(false);

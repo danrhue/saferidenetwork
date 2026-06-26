@@ -32,7 +32,11 @@ import {
   reconcileDayAfterMonthYearChange,
   selectValue,
 } from '@/lib/driver/wizard-form-options';
-import { validatePersonalDetailsStep } from '@/lib/driver/wizard-step-validation';
+import {
+  normalizeSsn,
+  ssnRequiresVerification,
+  validatePersonalDetailsStep,
+} from '@/lib/driver/wizard-step-validation';
 import type { WizardStepSaveResult } from '@/lib/driver/wizard-step-save';
 import {
   WIZARD_MAILING_FIELDS,
@@ -152,6 +156,7 @@ export default function DriverOnboardingWizard(props: DriverOnboardingWizardProp
 
   const router = useRouter();
   const operatingStatesRef = useRef<OperatingStatesStepHandle>(null);
+  const [savedSsnBaseline, setSavedSsnBaseline] = useState('');
   const [currentStep, setCurrentStep] = useState(clampWizardStep(initialStep));
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [stepSaving, setStepSaving] = useState(false);
@@ -195,8 +200,13 @@ export default function DriverOnboardingWizard(props: DriverOnboardingWizardProp
   useEffect(() => {
     if (currentStep !== 5) {
       setSsnVerify('');
+      setSavedSsnBaseline('');
+      return;
     }
+    setSavedSsnBaseline(normalizeSsn(profile.ssn));
   }, [currentStep]);
+
+  const showSsnVerify = ssnRequiresVerification(profile, savedSsnBaseline);
 
   const handleChange = (field: string, value: unknown) => {
     onChange(field, value);
@@ -269,7 +279,12 @@ export default function DriverOnboardingWizard(props: DriverOnboardingWizardProp
     }
 
     if (step === 5) {
-      Object.assign(newErrors, validatePersonalDetailsStep(profile, ssnVerify));
+      Object.assign(
+        newErrors,
+        validatePersonalDetailsStep(profile, ssnVerify, {
+          savedSsnBaseline,
+        })
+      );
     } else {
       (WIZARD_STEP_FIELDS[step] || []).forEach((field) => {
         if (!hasValue(profile, field)) {
@@ -554,6 +569,7 @@ export default function DriverOnboardingWizard(props: DriverOnboardingWizardProp
             errors={errors}
             ssnVerify={ssnVerify}
             onSsnVerifyChange={handleSsnVerifyChange}
+            showSsnVerify={showSsnVerify}
           />
         )}
         {currentStep === 6 && (
@@ -926,9 +942,11 @@ function PersonalDetailsStep({
   errors,
   ssnVerify,
   onSsnVerifyChange,
+  showSsnVerify,
 }: StepProps & {
   ssnVerify: string;
   onSsnVerifyChange: (value: string) => void;
+  showSsnVerify: boolean;
 }) {
   const birthYearOptions = useMemo(() => getBirthYearOptions(), []);
   const birthDayOptions = useDateOfBirthOptions(profile.dob_month, profile.dob_year);
@@ -984,6 +1002,8 @@ function PersonalDetailsStep({
         onSsnVerifyChange={onSsnVerifyChange}
         ssnError={errors.ssn}
         ssnVerifyError={errors.ssn_verify}
+        showVerify={showSsnVerify}
+        ssnOnFile={!showSsnVerify && Boolean(selectValue(profile.ssn))}
       />
 
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2">

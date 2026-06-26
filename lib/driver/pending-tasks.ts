@@ -4,6 +4,8 @@ import {
   type RequiredDocument,
 } from '@/lib/driver/required-documents';
 import type { PersonalProfile } from '@/lib/driver/onboarding-completion';
+import { isPersonalDetailsStepComplete } from '@/lib/driver/wizard-step-completion';
+import { PROFILE_WIZARD_PATH } from '@/lib/driver/wizard-steps';
 import { normalizeStateCodes } from '@/lib/driver/us-states';
 
 export type DriverDocumentRecord = {
@@ -14,6 +16,9 @@ export type DriverDocumentRecord = {
   rejection_reason?: string | null;
   uploaded_at?: string;
 };
+
+/** Profile wizard entry — smart resume picks the right step (no hardcoded ?step=). */
+export const PROFILE_WIZARD_HREF = PROFILE_WIZARD_PATH;
 
 export type PendingTaskKind = 'document' | 'profile';
 
@@ -172,7 +177,7 @@ function buildProfileTasks(profile: PersonalProfile): PendingTask[] {
       'profile-driving-states',
       'Select operating states',
       'Choose the state(s) where you plan to drive so we can show the correct required documents.',
-      '/dashboard/profile?step=2',
+      PROFILE_WIZARD_HREF,
       'high'
     );
   }
@@ -187,7 +192,7 @@ function buildProfileTasks(profile: PersonalProfile): PendingTask[] {
       'profile-personal',
       'Complete personal information',
       'Add your name, email, and phone number.',
-      '/dashboard/profile?step=1'
+      PROFILE_WIZARD_HREF
     );
   }
 
@@ -201,7 +206,7 @@ function buildProfileTasks(profile: PersonalProfile): PendingTask[] {
       'profile-address',
       'Complete your addresses',
       'Add your physical address and mailing address if different.',
-      '/dashboard/profile?step=3'
+      PROFILE_WIZARD_HREF
     );
   }
 
@@ -210,16 +215,16 @@ function buildProfileTasks(profile: PersonalProfile): PendingTask[] {
       'profile-license',
       "Add driver's license details",
       'Enter your license number and issuing state on your profile.',
-      '/dashboard/profile?step=4'
+      PROFILE_WIZARD_HREF
     );
   }
 
-  if (!hasValue(profile, 'dob_year') || !hasValue(profile, 'ssn')) {
+  if (!isPersonalDetailsStepComplete(profile)) {
     addTask(
       'profile-details',
       'Complete personal details',
-      'Date of birth and SSN are required for verification.',
-      '/dashboard/profile?step=5'
+      'Date of birth, SSN, and personal attributes are required for verification.',
+      PROFILE_WIZARD_HREF
     );
   }
 
@@ -231,7 +236,7 @@ function buildProfileTasks(profile: PersonalProfile): PendingTask[] {
       'profile-emergency',
       'Add emergency contact',
       'Provide an emergency contact name and phone number.',
-      '/dashboard/profile?step=6'
+      PROFILE_WIZARD_HREF
     );
   }
 
@@ -240,7 +245,7 @@ function buildProfileTasks(profile: PersonalProfile): PendingTask[] {
       'profile-photo',
       'Upload profile photo',
       'A profile photo helps organizations recognize you.',
-      '/dashboard/profile?step=7',
+      PROFILE_WIZARD_HREF,
       'low'
     );
   } else if (profile.profile_photo_status === 'rejected') {
@@ -265,7 +270,7 @@ function buildProfileTasks(profile: PersonalProfile): PendingTask[] {
       'profile-vehicle',
       'Complete vehicle information',
       'Add your vehicle year, make, model, and passenger capacity.',
-      '/dashboard/profile?step=8'
+      PROFILE_WIZARD_HREF
     );
   }
 
@@ -278,7 +283,7 @@ function buildProfileTasks(profile: PersonalProfile): PendingTask[] {
       'profile-payouts',
       'Set up payout account',
       'Connect Stripe to receive trip payouts.',
-      '/dashboard/profile?step=9',
+      PROFILE_WIZARD_HREF,
       'high'
     );
   }

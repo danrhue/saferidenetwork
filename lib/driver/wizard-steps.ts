@@ -2,6 +2,9 @@
 
 export const WIZARD_STEP_COUNT = 10;
 
+/** Default profile wizard URL — smart resume selects the correct step on load. */
+export const PROFILE_WIZARD_PATH = '/dashboard/profile';
+
 export const WIZARD_STEPS = [
   { id: 1, title: 'Personal Info' },
   { id: 2, title: 'Operating States' },
@@ -72,16 +75,13 @@ export function stepPersistsProgressOnly(step: number): boolean {
   return step === 9 || step === 10;
 }
 
-/** Resolve the wizard step to show on load (URL param takes priority over DB). */
-export function resolveInitialWizardStep(
-  urlStepParam: string | null,
-  dbStep: number | null | undefined
-): number {
-  if (urlStepParam) {
-    const parsed = parseInt(urlStepParam, 10);
-    if (Number.isFinite(parsed) && parsed >= 1) {
-      return clampWizardStep(parsed);
-    }
-  }
-  return clampWizardStep(dbStep ?? 1);
-}
+export {
+  areWizardStepsCompleteThrough,
+  getFirstIncompleteWizardStep,
+  getNextIncompleteWizardStep,
+  getWizardStepCompletionMap,
+  isPersonalDetailsStepComplete,
+  isWizardStepComplete,
+  resolveWizardResumeStep,
+  type WizardCompletionContext,
+} from '@/lib/driver/wizard-step-completion';

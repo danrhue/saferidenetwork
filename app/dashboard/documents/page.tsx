@@ -223,7 +223,7 @@ export default function DriverDocumentsPage() {
               'Choose the states where you plan to drive so we can show the correct required documents.'}
           </p>
           <Link
-            href="/dashboard/profile?step=2"
+            href="/dashboard/profile"
             className="mt-3 inline-block rounded-xl bg-[#1E3A8A] px-5 py-2 text-sm font-semibold text-white hover:bg-[#162D6B]"
           >
             Set Operating States
