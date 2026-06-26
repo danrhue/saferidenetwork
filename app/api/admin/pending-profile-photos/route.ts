@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireAdminUser } from '@/lib/admin-auth';
 import { listDriverProfilePhotos } from '@/lib/admin/profile-photo-review';
+import { getErrorMessage } from '@/lib/errors';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,7 +16,8 @@ export async function GET() {
     const drivers = await listDriverProfilePhotos(auth.admin, { status: 'pending' });
     return NextResponse.json(drivers);
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Failed to load pending profile photos';
+    const message = getErrorMessage(error);
+    console.error('[api/admin/pending-profile-photos] List failed:', message, error);
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

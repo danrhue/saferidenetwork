@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireAdminUser } from '@/lib/admin-auth';
 import { reviewDriverProfilePhotos } from '@/lib/admin/profile-photo-review';
+import { getErrorMessage } from '@/lib/errors';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,13 +24,20 @@ export async function POST(request: Request) {
       ? [profileId]
       : [];
 
-  const result = await reviewDriverProfilePhotos(
-    auth.admin,
-    auth.user.id,
-    ids,
-    status,
-    typeof reason === 'string' ? reason : undefined
-  );
+  let result;
+  try {
+    result = await reviewDriverProfilePhotos(
+      auth.admin,
+      auth.user.id,
+      ids,
+      status,
+      typeof reason === 'string' ? reason : undefined
+    );
+  } catch (error) {
+    const message = getErrorMessage(error);
+    console.error('[api/admin/profile-photo-status] Review failed:', message, error);
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
 
   if (result.succeeded.length === 0 && result.failed.length > 0) {
     return NextResponse.json(

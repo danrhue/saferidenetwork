@@ -1,5 +1,6 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
-import { resolveProfilePhotoUrl } from '@/lib/storage/profile-photos';
+import type { PostgrestError, SupabaseClient } from '@supabase/supabase-js';
+import { getErrorMessage } from '@/lib/errors';
+import { resolveAdminProfilePhotoUrl } from '@/lib/storage/profile-photos';
 
 export type ProfilePhotoReviewAction = 'approved' | 'rejected';
 
@@ -7,6 +8,33 @@ export type ProfilePhotoReviewResult = {
   succeeded: string[];
   failed: { profileId: string; error: string }[];
 };
+
+/** Columns required for the review list — avoids optional migration-only fields. */
+const PROFILE_PHOTO_LIST_SELECT =
+  'id, full_name, phone, email, profile_photo_url, profile_photo_status, profile_photo_rejection_reason, updated_at';
+
+function isMissingColumnError(message: string): boolean {
+  const lower = message.toLowerCase();
+  return (
+    lower.includes('column') &&
+    (lower.includes('does not exist') || lower.includes('could not find'))
+  );
+}
+
+function isMissingRelationError(message: string): boolean {
+  const lower = message.toLowerCase();
+  return lower.includes('relation') && lower.includes('does not exist');
+}
+
+function throwQueryError(context: string, error: PostgrestError): never {
+  console.error(`[profile-photo-review] ${context}:`, {
+    message: error.message,
+    code: error.code,
+    details: error.details,
+    hint: error.hint,
+  });
+  throw new Error(error.message);
+}
 
 export async function reviewDriverProfilePhotos(
   admin: SupabaseClient,
@@ -61,16 +89,33 @@ export async function reviewDriverProfilePhotos(
       continue;
     }
 
-    const { error: updateError } = await admin
-      .from('profiles')
-      .update({
-        profile_photo_status: action,
-        profile_photo_rejection_reason: trimmedReason,
-        profile_photo_last_reviewed_at: now,
-        profile_photo_last_reviewed_by: adminUserId,
-        updated_at: now,
-      })
-      .eq('id', profileId);
+    const fullUpdate = {
+      profile_photo_status: action,
+      profile_photo_rejection_reason: trimmedReason,
+      profile_photo_last_reviewed_at: now,
+      profile_photo_last_reviewed_by: adminUserId,
+      updated_at: now,
+    };
+
+    const minimalUpdate = {
+      profile_photo_status: action,
+      profile_photo_rejection_reason: trimmedReason,
+      updated_at: now,
+    };
+
+    let updateError = (
+      await admin.from('profiles').update(fullUpdate).eq('id', profileId)
+    ).error;
+
+    if (updateError && isMissingColumnError(updateError.message)) {
+      console.warn(
+        '[profile-photo-review] Optional review metadata columns missing; applying minimal update.',
+        updateError.message
+      );
+      updateError = (
+        await admin.from('profiles').update(minimalUpdate).eq('id', profileId)
+      ).error;
+    }
 
     if (updateError) {
       failed.push({ profileId, error: updateError.message });
@@ -86,7 +131,19 @@ export async function reviewDriverProfilePhotos(
     });
 
     if (auditError) {
-      failed.push({ profileId, error: `Review saved but audit log failed: ${auditError.message}` });
+      if (isMissingRelationError(auditError.message)) {
+        console.error(
+          '[profile-photo-review] Audit log table missing — review saved without audit entry. Run profile_photo_audit_log_migration.sql.',
+          auditError.message
+        );
+        succeeded.push(profileId);
+        continue;
+      }
+
+      failed.push({
+        profileId,
+        error: `Review saved but audit log failed: ${auditError.message}`,
+      });
       continue;
     }
 
@@ -118,7 +175,23 @@ export async function fetchLatestAuditByProfileIds(
     .in('profile_id', profileIds)
     .order('created_at', { ascending: false });
 
-  if (error || !logs?.length) return {};
+  if (error) {
+    if (isMissingRelationError(error.message)) {
+      console.warn(
+        '[profile-photo-review] Audit log table not found; skipping last-audit lookup. Run profile_photo_audit_log_migration.sql.'
+      );
+      return {};
+    }
+    console.error('[profile-photo-review] Audit log fetch error:', {
+      message: error.message,
+      code: error.code,
+      details: error.details,
+      hint: error.hint,
+    });
+    return {};
+  }
+
+  if (!logs?.length) return {};
 
   const adminIds = [...new Set(logs.map((l) => l.admin_id))];
   const { data: admins } = await admin
@@ -149,20 +222,23 @@ export type ProfilePhotoListFilters = {
   to?: string | null;
 };
 
-export async function listDriverProfilePhotos(
+function buildProfilePhotoListQuery(
   admin: SupabaseClient,
-  filters: ProfilePhotoListFilters = {}
+  filters: ProfilePhotoListFilters,
+  options?: { excludeDeleted?: boolean }
 ) {
   const status = filters.status ?? 'pending';
 
   let query = admin
     .from('profiles')
-    .select(
-      'id, full_name, phone, email, profile_photo_url, profile_photo_status, profile_photo_rejection_reason, profile_photo_last_reviewed_at, profile_photo_last_reviewed_by, updated_at'
-    )
+    .select(PROFILE_PHOTO_LIST_SELECT)
     .eq('role', 'driver')
     .not('profile_photo_url', 'is', null)
     .order('updated_at', { ascending: false });
+
+  if (options?.excludeDeleted !== false) {
+    query = query.is('deleted_at', null);
+  }
 
   if (status !== 'all') {
     query = query.eq('profile_photo_status', status);
@@ -183,8 +259,27 @@ export async function listDriverProfilePhotos(
     }
   }
 
-  const { data, error } = await query;
-  if (error) throw error;
+  return query;
+}
+
+export async function listDriverProfilePhotos(
+  admin: SupabaseClient,
+  filters: ProfilePhotoListFilters = {}
+) {
+  let { data, error } = await buildProfilePhotoListQuery(admin, filters);
+
+  if (error && isMissingColumnError(error.message) && error.message.includes('deleted_at')) {
+    console.warn(
+      '[profile-photo-review] deleted_at column missing; listing without soft-delete filter.'
+    );
+    ({ data, error } = await buildProfilePhotoListQuery(admin, filters, {
+      excludeDeleted: false,
+    }));
+  }
+
+  if (error) {
+    throwQueryError('Profile photo list query failed', error);
+  }
 
   const rows = data ?? [];
   const auditByProfile = await fetchLatestAuditByProfileIds(
@@ -195,7 +290,7 @@ export async function listDriverProfilePhotos(
   return Promise.all(
     rows.map(async (row) => ({
       ...row,
-      photo_url: await resolveProfilePhotoUrl(admin, row.profile_photo_url),
+      photo_url: await resolveAdminProfilePhotoUrl(admin, row.profile_photo_url),
       last_audit: auditByProfile[row.id] ?? null,
     }))
   );
@@ -211,7 +306,16 @@ export async function fetchProfilePhotoAuditHistory(
     .eq('profile_id', profileId)
     .order('created_at', { ascending: false });
 
-  if (error || !logs?.length) return [];
+  if (error) {
+    if (isMissingRelationError(error.message)) {
+      console.warn('[profile-photo-review] Audit log table not found for history lookup.');
+      return [];
+    }
+    console.error('[profile-photo-review] Audit history error:', getErrorMessage(error));
+    return [];
+  }
+
+  if (!logs?.length) return [];
 
   const adminIds = [...new Set(logs.map((l) => l.admin_id))];
   const { data: admins } = await admin

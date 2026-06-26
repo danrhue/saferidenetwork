@@ -69,6 +69,34 @@ export async function resolveProfilePhotoUrl(
   return createLegacyProfilePhotoSignedUrl(supabase, storagePath);
 }
 
+/**
+ * Admin review: always prefer a signed URL so pending photos work even when the
+ * profile-photos bucket is private or the object is not yet publicly readable.
+ */
+export async function resolveAdminProfilePhotoUrl(
+  supabase: SupabaseClient,
+  storagePath: string | null | undefined
+): Promise<string | null> {
+  if (!storagePath) return null;
+
+  if (storagePath.startsWith('http://') || storagePath.startsWith('https://')) {
+    return storagePath;
+  }
+
+  const signed = await supabase.storage
+    .from(PROFILE_PHOTOS_BUCKET)
+    .createSignedUrl(storagePath, SIGNED_URL_TTL_SECONDS);
+
+  if (!signed.error && signed.data?.signedUrl) {
+    return signed.data.signedUrl;
+  }
+
+  const publicUrl = getProfilePhotoPublicUrl(storagePath);
+  if (publicUrl) return publicUrl;
+
+  return createLegacyProfilePhotoSignedUrl(supabase, storagePath);
+}
+
 /** Resolve URL respecting approval status (use isOwner for the driver's own profile view). */
 export async function resolveProfilePhotoForProfile(
   supabase: SupabaseClient,

@@ -77,7 +77,12 @@ export default function ProfilePhotoReviewPage() {
       setSelectedIds(new Set());
     } else {
       const err = await res.json().catch(() => ({}));
-      setError(err.error || 'Failed to load profile photos');
+      const message =
+        typeof err.error === 'string' && err.error
+          ? err.error
+          : `Failed to load profile photos (HTTP ${res.status})`;
+      console.error('[profile-photos] Load failed:', res.status, err);
+      setError(message);
       setDrivers([]);
     }
 

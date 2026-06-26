@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireAdminUser } from '@/lib/admin-auth';
 import { listDriverProfilePhotos } from '@/lib/admin/profile-photo-review';
+import { getErrorMessage } from '@/lib/errors';
 
 export const dynamic = 'force-dynamic';
 
@@ -31,8 +32,8 @@ export async function GET(request: Request) {
     });
     return NextResponse.json(drivers);
   } catch (error) {
-    console.error('Profile photos list error:', error);
-    const message = error instanceof Error ? error.message : 'Failed to load profile photos';
+    const message = getErrorMessage(error);
+    console.error('[api/admin/profile-photos] List failed:', message, error);
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
