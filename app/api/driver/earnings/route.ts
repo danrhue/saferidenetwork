@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
-import { fetchDriverCompletedTripEarnings } from '@/lib/driver/driver-earnings';
+import { fetchDriverPaymentsDashboard } from '@/lib/driver/driver-earnings';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,10 +20,18 @@ export async function GET(request: NextRequest) {
     const to = searchParams.get('to');
     const page = Number(searchParams.get('page') ?? '1');
 
-    const result = await fetchDriverCompletedTripEarnings(supabase, user.id, {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('stripe_account_id, stripe_payouts_enabled')
+      .eq('id', user.id)
+      .single();
+
+    const result = await fetchDriverPaymentsDashboard(supabase, user.id, {
       from,
       to,
       page: Number.isFinite(page) ? page : 1,
+      stripeAccountId: profile?.stripe_account_id ?? null,
+      stripePayoutsEnabled: profile?.stripe_payouts_enabled ?? false,
     });
 
     return NextResponse.json(result);

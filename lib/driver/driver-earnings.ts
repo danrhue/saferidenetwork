@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { getStripe } from '@/lib/stripe';
 
 export type CompletedTripEarning = {
   id: string;
@@ -6,9 +7,24 @@ export type CompletedTripEarning = {
   pickup_location: string;
   dropoff_location: string;
   pickup_time: string;
-  completed_at: string;
+  /** Last update timestamp — used for week grouping and date filters (no completed_at column). */
+  updated_at: string;
   payout_amount: number;
   driver_payout_status: string;
+  payment_status: string | null;
+  platform_fee_status: string | null;
+  organization_name: string;
+  distance_miles: number | null;
+};
+
+export type ActiveTripEarning = {
+  id: string;
+  title: string;
+  pickup_location: string;
+  dropoff_location: string;
+  pickup_time: string;
+  status: string;
+  expected_payout: number;
   organization_name: string;
   distance_miles: number | null;
 };
@@ -28,6 +44,13 @@ export type DriverEarningsSummary = {
   total_earnings: number;
 };
 
+export type DriverBalanceSummary = {
+  current_balance: number;
+  pending_payouts: number;
+  paid_out_total: number;
+  stripe_connected: boolean;
+};
+
 export type DriverEarningsResponse = {
   summary: DriverEarningsSummary;
   view: 'weekly' | 'filtered';
@@ -37,37 +60,54 @@ export type DriverEarningsResponse = {
   page: number;
 };
 
+export type DriverPaymentsResponse = {
+  balance: DriverBalanceSummary;
+  completed: DriverEarningsResponse;
+  active_trips: ActiveTripEarning[];
+};
+
 type TripRow = {
   id: string;
   title: string;
   pickup_location: string;
   dropoff_location: string;
   pickup_time: string;
-  ended_at: string | null;
+  created_at: string;
   updated_at: string;
+  status: string;
   final_price: number | null;
+  total_price: number | null;
   price: number | null;
   driver_payout_status: string | null;
+  payment_status: string | null;
+  platform_fee_status: string | null;
   distance_miles: number | null;
   organization_id: string;
 };
 
+const TRIP_SELECT_FIELDS =
+  'id, title, pickup_location, dropoff_location, pickup_time, created_at, updated_at, status, final_price, total_price, price, driver_payout_status, payment_status, platform_fee_status, distance_miles, organization_id';
+
 const DEFAULT_WEEKS_PER_PAGE = 8;
 const DEFAULT_TRIPS_PER_PAGE = 20;
 
+/** Driver earnings: final_price (driver comp) → price (legacy) → total_price. */
 export function getTripPayoutAmount(trip: {
   final_price?: number | null;
   price?: number | null;
+  total_price?: number | null;
 }): number {
-  const amount = trip.final_price ?? trip.price ?? 0;
+  const amount = trip.final_price ?? trip.price ?? trip.total_price ?? 0;
   return Math.round(Number(amount) * 100) / 100;
 }
 
-export function getTripCompletedAt(trip: {
-  ended_at?: string | null;
-  updated_at?: string | null;
-}): string {
-  return trip.ended_at ?? trip.updated_at ?? new Date(0).toISOString();
+export function isPendingDriverPayout(status: string | null | undefined): boolean {
+  const normalized = status ?? 'pending';
+  return normalized === 'pending' || normalized === 'failed';
+}
+
+export function isPaidDriverPayout(status: string | null | undefined): boolean {
+  return status === 'transferred';
 }
 
 export function parseDateInputStart(value: string): Date | null {
@@ -130,22 +170,38 @@ function toCompletedTripEarning(
     pickup_location: trip.pickup_location,
     dropoff_location: trip.dropoff_location,
     pickup_time: trip.pickup_time,
-    completed_at: getTripCompletedAt(trip),
+    updated_at: trip.updated_at,
     payout_amount: getTripPayoutAmount(trip),
     driver_payout_status: trip.driver_payout_status ?? 'pending',
+    payment_status: trip.payment_status,
+    platform_fee_status: trip.platform_fee_status,
+    organization_name: organizationName,
+    distance_miles: trip.distance_miles,
+  };
+}
+
+function toActiveTripEarning(trip: TripRow, organizationName: string): ActiveTripEarning {
+  return {
+    id: trip.id,
+    title: trip.title,
+    pickup_location: trip.pickup_location,
+    dropoff_location: trip.dropoff_location,
+    pickup_time: trip.pickup_time,
+    status: trip.status,
+    expected_payout: getTripPayoutAmount(trip),
     organization_name: organizationName,
     distance_miles: trip.distance_miles,
   };
 }
 
 function isWithinDateRange(
-  completedAtIso: string,
+  updatedAtIso: string,
   fromDate: Date | null,
   toDate: Date | null
 ): boolean {
-  const completedAt = new Date(completedAtIso);
-  if (fromDate && completedAt < fromDate) return false;
-  if (toDate && completedAt > toDate) return false;
+  const updatedAt = new Date(updatedAtIso);
+  if (fromDate && updatedAt < fromDate) return false;
+  if (toDate && updatedAt > toDate) return false;
   return true;
 }
 
@@ -153,8 +209,8 @@ export function groupTripsByWeek(trips: CompletedTripEarning[]): WeeklyEarningsG
   const groups = new Map<string, WeeklyEarningsGroup>();
 
   for (const trip of trips) {
-    const completedDate = new Date(trip.completed_at);
-    const weekStart = getWeekStart(completedDate);
+    const weekDate = new Date(trip.updated_at);
+    const weekStart = getWeekStart(weekDate);
     const weekEnd = getWeekEnd(weekStart);
     const weekKey = weekStart.toISOString().slice(0, 10);
 
@@ -162,7 +218,8 @@ export function groupTripsByWeek(trips: CompletedTripEarning[]): WeeklyEarningsG
     if (existing) {
       existing.trips.push(trip);
       existing.trip_count += 1;
-      existing.total_earnings = Math.round((existing.total_earnings + trip.payout_amount) * 100) / 100;
+      existing.total_earnings =
+        Math.round((existing.total_earnings + trip.payout_amount) * 100) / 100;
       continue;
     }
 
@@ -181,7 +238,7 @@ export function groupTripsByWeek(trips: CompletedTripEarning[]): WeeklyEarningsG
     .map((group) => ({
       ...group,
       trips: [...group.trips].sort(
-        (a, b) => new Date(b.completed_at).getTime() - new Date(a.completed_at).getTime()
+        (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
       ),
       total_earnings: Math.round(group.total_earnings * 100) / 100,
     }))
@@ -194,6 +251,38 @@ function summarizeTrips(trips: CompletedTripEarning[]): DriverEarningsSummary {
     total_trips: trips.length,
     total_earnings: Math.round(totalEarnings * 100) / 100,
   };
+}
+
+function calculatePendingPayouts(completedTrips: CompletedTripEarning[]): number {
+  const total = completedTrips
+    .filter((trip) => isPendingDriverPayout(trip.driver_payout_status))
+    .reduce((sum, trip) => sum + trip.payout_amount, 0);
+  return Math.round(total * 100) / 100;
+}
+
+function calculatePaidOutTotal(completedTrips: CompletedTripEarning[]): number {
+  const total = completedTrips
+    .filter((trip) => isPaidDriverPayout(trip.driver_payout_status))
+    .reduce((sum, trip) => sum + trip.payout_amount, 0);
+  return Math.round(total * 100) / 100;
+}
+
+export async function fetchStripeConnectAvailableBalance(
+  stripeAccountId: string | null | undefined
+): Promise<number> {
+  if (!stripeAccountId) return 0;
+
+  try {
+    const stripe = getStripe();
+    const balance = await stripe.balance.retrieve({ stripeAccount: stripeAccountId });
+    const availableUsd = (balance.available ?? [])
+      .filter((entry) => entry.currency === 'usd')
+      .reduce((sum, entry) => sum + entry.amount, 0);
+    return Math.round(availableUsd) / 100;
+  } catch (error) {
+    console.error('Stripe Connect balance fetch failed:', error);
+    return 0;
+  }
 }
 
 async function loadOrganizationNames(
@@ -220,29 +309,14 @@ async function loadOrganizationNames(
   return map;
 }
 
-export async function fetchDriverCompletedTripEarnings(
+/** Completed trips for this driver — identified by status, not a completed_at column. */
+async function fetchCompletedTripRows(
   supabase: SupabaseClient,
-  driverId: string,
-  options?: {
-    from?: string | null;
-    to?: string | null;
-    page?: number;
-    weeksPerPage?: number;
-    tripsPerPage?: number;
-  }
-): Promise<DriverEarningsResponse> {
-  const page = Math.max(1, options?.page ?? 1);
-  const weeksPerPage = options?.weeksPerPage ?? DEFAULT_WEEKS_PER_PAGE;
-  const tripsPerPage = options?.tripsPerPage ?? DEFAULT_TRIPS_PER_PAGE;
-  const fromDate = options?.from ? parseDateInputStart(options.from) : null;
-  const toDate = options?.to ? parseDateInputEnd(options.to) : null;
-  const hasDateFilter = Boolean(fromDate || toDate);
-
+  driverId: string
+): Promise<TripRow[]> {
   const { data, error } = await supabase
     .from('trips')
-    .select(
-      'id, title, pickup_location, dropoff_location, pickup_time, ended_at, updated_at, final_price, price, driver_payout_status, distance_miles, organization_id'
-    )
+    .select(TRIP_SELECT_FIELDS)
     .eq('assigned_driver_id', driverId)
     .eq('status', 'completed')
     .order('updated_at', { ascending: false });
@@ -251,21 +325,51 @@ export async function fetchDriverCompletedTripEarnings(
     throw new Error(`Could not load completed trips: ${error.message}`);
   }
 
-  const rows = (data ?? []) as TripRow[];
-  const orgIds = [...new Set(rows.map((trip) => trip.organization_id))];
-  const orgNames = await loadOrganizationNames(supabase, orgIds);
+  return (data ?? []) as TripRow[];
+}
 
-  const allTrips = rows
-    .map((trip) =>
-      toCompletedTripEarning(trip, orgNames[trip.organization_id] ?? 'Organization')
-    )
-    .sort(
-      (a, b) => new Date(b.completed_at).getTime() - new Date(a.completed_at).getTime()
-    );
+/** Assigned trips that are not yet completed. */
+async function fetchPendingTripRows(
+  supabase: SupabaseClient,
+  driverId: string
+): Promise<TripRow[]> {
+  const { data, error } = await supabase
+    .from('trips')
+    .select(TRIP_SELECT_FIELDS)
+    .eq('assigned_driver_id', driverId)
+    .neq('status', 'completed')
+    .neq('status', 'cancelled')
+    .order('pickup_time', { ascending: true });
+
+  if (error) {
+    throw new Error(`Could not load pending trips: ${error.message}`);
+  }
+
+  return (data ?? []) as TripRow[];
+}
+
+function buildCompletedEarningsResponse(
+  completedTrips: CompletedTripEarning[],
+  options: {
+    from?: string | null;
+    to?: string | null;
+    page?: number;
+    weeksPerPage?: number;
+    tripsPerPage?: number;
+  }
+): DriverEarningsResponse {
+  const page = Math.max(1, options.page ?? 1);
+  const weeksPerPage = options.weeksPerPage ?? DEFAULT_WEEKS_PER_PAGE;
+  const tripsPerPage = options.tripsPerPage ?? DEFAULT_TRIPS_PER_PAGE;
+  const fromDate = options.from ? parseDateInputStart(options.from) : null;
+  const toDate = options.to ? parseDateInputEnd(options.to) : null;
+  const hasDateFilter = Boolean(fromDate || toDate);
 
   const scopedTrips = hasDateFilter
-    ? allTrips.filter((trip) => isWithinDateRange(trip.completed_at, fromDate, toDate))
-    : allTrips;
+    ? completedTrips.filter((trip) =>
+        isWithinDateRange(trip.updated_at, fromDate, toDate)
+      )
+    : completedTrips;
 
   const summary = summarizeTrips(scopedTrips);
 
@@ -292,5 +396,81 @@ export async function fetchDriverCompletedTripEarnings(
     weeks: visibleWeeks,
     has_more: visibleWeeks.length < weeks.length,
     page,
+  };
+}
+
+export async function fetchDriverCompletedTripEarnings(
+  supabase: SupabaseClient,
+  driverId: string,
+  options?: {
+    from?: string | null;
+    to?: string | null;
+    page?: number;
+    weeksPerPage?: number;
+    tripsPerPage?: number;
+  }
+): Promise<DriverEarningsResponse> {
+  const rows = await fetchCompletedTripRows(supabase, driverId);
+  const orgIds = [...new Set(rows.map((trip) => trip.organization_id))];
+  const orgNames = await loadOrganizationNames(supabase, orgIds);
+
+  const completedTrips = rows
+    .map((trip) => toCompletedTripEarning(trip, orgNames[trip.organization_id] ?? 'Organization'))
+    .sort(
+      (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+    );
+
+  return buildCompletedEarningsResponse(completedTrips, options ?? {});
+}
+
+export async function fetchDriverPaymentsDashboard(
+  supabase: SupabaseClient,
+  driverId: string,
+  options?: {
+    from?: string | null;
+    to?: string | null;
+    page?: number;
+    stripeAccountId?: string | null;
+    stripePayoutsEnabled?: boolean;
+  }
+): Promise<DriverPaymentsResponse> {
+  const [completedRows, pendingRows] = await Promise.all([
+    fetchCompletedTripRows(supabase, driverId),
+    fetchPendingTripRows(supabase, driverId),
+  ]);
+
+  const orgIds = [
+    ...new Set([
+      ...completedRows.map((trip) => trip.organization_id),
+      ...pendingRows.map((trip) => trip.organization_id),
+    ]),
+  ];
+  const orgNames = await loadOrganizationNames(supabase, orgIds);
+
+  const completedTrips = completedRows
+    .map((trip) => toCompletedTripEarning(trip, orgNames[trip.organization_id] ?? 'Organization'))
+    .sort(
+      (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+    );
+
+  const activeTrips = pendingRows.map((trip) =>
+    toActiveTripEarning(trip, orgNames[trip.organization_id] ?? 'Organization')
+  );
+
+  const stripeConnected = Boolean(options?.stripeAccountId && options?.stripePayoutsEnabled);
+  const paidOutTotal = calculatePaidOutTotal(completedTrips);
+  const currentBalance = stripeConnected
+    ? await fetchStripeConnectAvailableBalance(options?.stripeAccountId)
+    : paidOutTotal;
+
+  return {
+    balance: {
+      current_balance: currentBalance,
+      pending_payouts: calculatePendingPayouts(completedTrips),
+      paid_out_total: paidOutTotal,
+      stripe_connected: stripeConnected,
+    },
+    completed: buildCompletedEarningsResponse(completedTrips, options ?? {}),
+    active_trips: activeTrips,
   };
 }

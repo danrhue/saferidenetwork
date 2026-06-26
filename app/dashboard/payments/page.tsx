@@ -103,14 +103,14 @@ export default function DriverPaymentsPage() {
       <div className="mb-8">
         <h1 className="mb-2 text-3xl font-bold text-blue-950">Payments & Earnings</h1>
         <p className="text-gray-600">
-          Track completed trip payouts and manage your Stripe Connect account. Stripe setup is
-          optional for profile completion but required to receive payouts.
+          View your balance, pending payouts, completed earnings, and active trip compensation.
+          Connect Stripe below to receive payouts to your bank.
         </p>
       </div>
 
       <div className="space-y-8">
         <section>
-          <h2 className="mb-4 text-lg font-semibold text-blue-950">Earnings Overview</h2>
+          <h2 className="mb-4 text-lg font-semibold text-blue-950">Payments Dashboard</h2>
           <DriverEarningsPanel />
         </section>
 

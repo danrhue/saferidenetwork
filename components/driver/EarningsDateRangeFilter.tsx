@@ -27,7 +27,7 @@ export default function EarningsDateRangeFilter({
         <div>
           <h2 className="text-sm font-semibold text-blue-950">Date Range</h2>
           <p className="text-xs text-gray-500">
-            Filter completed trips by completion date, or leave blank to view weekly summaries.
+            Filter completed trips by updated date, or leave blank to view weekly summaries.
           </p>
         </div>
         {isFiltered && (
