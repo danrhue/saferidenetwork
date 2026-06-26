@@ -7,6 +7,8 @@ type ProfileCompletionOfferGateProps = {
   profileCompletion: number;
   incompleteRequirements: IncompleteOfferRequirement[];
   compact?: boolean;
+  /** offers = trip offer submission; browse = viewing the trip marketplace */
+  purpose?: 'offers' | 'browse';
 };
 
 function statusTone(status: string): string {
@@ -21,12 +23,20 @@ export default function ProfileCompletionOfferGate({
   profileCompletion,
   incompleteRequirements,
   compact = false,
+  purpose = 'offers',
 }: ProfileCompletionOfferGateProps) {
   const firstWizardStep = incompleteRequirements.find((r) => r.wizardStep)?.wizardStep;
   const resumeHref = firstWizardStep
     ? `${PROFILE_WIZARD_PATH}?step=${firstWizardStep}`
     : PROFILE_WIZARD_PATH;
 
+  const isBrowse = purpose === 'browse';
+  const blockedLabel = isBrowse
+    ? 'Browse Trips blocked until profile is 100%'
+    : 'Offers blocked until profile is 100%';
+  const headline = isBrowse
+    ? 'Complete your profile to browse available trips'
+    : 'Complete the items below to start making offers';
   return (
     <div
       className={`rounded-2xl border-2 border-amber-300 bg-gradient-to-br from-amber-50 to-orange-50 ${
@@ -44,14 +54,16 @@ export default function ProfileCompletionOfferGate({
             />
             <div>
               <p className="text-sm font-bold uppercase tracking-wide text-amber-900">
-                Offers blocked until profile is 100%
+                {blockedLabel}
               </p>
               <h2 className={`mt-1 font-bold text-amber-950 ${compact ? 'text-lg' : 'text-xl'}`}>
-                Complete the items below to start making offers
+                {headline}
               </h2>
               <p className="mt-2 text-sm leading-relaxed text-amber-900">
-                You are at <strong>{profileCompletion}%</strong> completion. Trip offers unlock
-                once every profile and compliance requirement is finished.
+                You are at <strong>{profileCompletion}%</strong> completion.{' '}
+                {isBrowse
+                  ? 'Available trips are hidden until every profile and compliance requirement is finished.'
+                  : 'Trip offers unlock once every profile and compliance requirement is finished.'}
               </p>
             </div>
           </div>

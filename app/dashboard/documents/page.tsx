@@ -2,28 +2,17 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
-import { Check } from 'lucide-react';
+import DriverDocumentCard, {
+  type DriverDocumentRecord,
+} from '@/components/driver/DriverDocumentCard';
 import {
   findDriverDocument,
-  formatDocumentValidity,
 } from '@/lib/driver/required-documents';
-import { isDocumentExpired } from '@/lib/driver/document-expiration';
 import { toDateInputValue } from '@/lib/driver/document-dates';
 import { useRequiredDriverDocuments } from '@/lib/driver/useRequiredDriverDocuments';
 import { useProfileCompletion } from '@/lib/driver/useProfileCompletion';
 import { formatStateList } from '@/lib/driver/us-states';
 import { uploadDriverDocument } from '@/app/actions/driver-documents';
-
-interface Document {
-  id: string;
-  document_type: string;
-  file_url: string;
-  file_name: string;
-  uploaded_at: string;
-  expires_at?: string;
-  status: string;
-  rejection_reason?: string;
-}
 
 type ExpirySaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 
@@ -38,7 +27,7 @@ export default function DriverDocumentsPage() {
     message: requirementsMessage,
   } = useRequiredDriverDocuments();
   const { refresh: refreshProfileCompletion } = useProfileCompletion();
-  const [documents, setDocuments] = useState<Document[]>([]);
+  const [documents, setDocuments] = useState<DriverDocumentRecord[]>([]);
   const [uploading, setUploading] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [expiryDates, setExpiryDates] = useState<Record<string, string>>({});
@@ -70,7 +59,7 @@ export default function DriverDocumentsPage() {
     }
   }, [documents]);
 
-  const syncExpiryDatesFromDocuments = (docs: Document[]) => {
+  const syncExpiryDatesFromDocuments = (docs: DriverDocumentRecord[]) => {
     const synced: Record<string, string> = {};
     requiredDocuments.forEach((req) => {
       if (!req.requiresExpiration && !req.validityYears) return;
@@ -92,7 +81,7 @@ export default function DriverDocumentsPage() {
     }
   };
 
-  const resolveExpiryForUpload = (documentType: string, existing?: Document) => {
+  const resolveExpiryForUpload = (documentType: string, existing?: DriverDocumentRecord) => {
     if (expiryDates[documentType]) {
       return expiryDates[documentType];
     }
@@ -258,232 +247,121 @@ export default function DriverDocumentsPage() {
   const progress =
     totalRequired > 0 ? Math.round((approvedCount / totalRequired) * 100) : 0;
 
-  const getStatusBadge = (doc: Document) => {
-    if (isDocumentExpired(doc.expires_at) && doc.status !== 'rejected') {
-      return (
-        <span className="px-3 py-1 text-xs font-medium bg-red-100 text-red-700 rounded-full">
-          Expired
-        </span>
-      );
-    }
-
-    switch (doc.status) {
-      case 'approved':
-        return <span className="px-3 py-1 text-xs font-medium bg-green-100 text-green-700 rounded-full">Approved</span>;
-      case 'rejected':
-        return <span className="px-3 py-1 text-xs font-medium bg-red-100 text-red-700 rounded-full">Rejected</span>;
-      case 'pending_review':
-        return <span className="px-3 py-1 text-xs font-medium bg-yellow-100 text-yellow-700 rounded-full">Pending Review</span>;
-      default:
-        return <span className="px-3 py-1 text-xs font-medium bg-gray-100 text-gray-600 rounded-full">Uploaded</span>;
-    }
-  };
-
-  const renderExpirySaveStatus = (documentType: string) => {
-    const status = expirySaveStatus[documentType] ?? 'idle';
-    const error = expirySaveError[documentType];
-
-    if (status === 'saving') {
-      return <span className="text-xs text-gray-500">Saving…</span>;
-    }
-    if (status === 'saved') {
-      return (
-        <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700">
-          <Check size={14} strokeWidth={2.5} aria-hidden />
-          Saved
-        </span>
-      );
-    }
-    if (status === 'error' && error) {
-      return <span className="text-xs text-red-600">{error}</span>;
-    }
-    return null;
-  };
-
-  const getFilePreview = (doc: Document) => {
-    const isImage = /\.(jpg|jpeg|png|gif)$/i.test(doc.file_name);
-    return isImage ? (
-      <img
-        src={doc.file_url}
-        alt={doc.file_name}
-        className="w-full h-40 object-cover rounded-lg cursor-pointer hover:opacity-90"
-        onClick={() => setPreviewUrl(doc.file_url)}
-      />
-    ) : (
-      <div
-        className="w-full h-40 bg-gray-100 rounded-lg flex items-center justify-center cursor-pointer"
-        onClick={() => window.open(doc.file_url, '_blank')}
-      >
-        <div className="text-center">
-          <div className="text-5xl">📄</div>
-          <div className="text-xs text-gray-500 mt-2 px-2 break-all">{doc.file_name}</div>
-        </div>
+  if (requirementsLoading) {
+    return (
+      <div className="mx-auto flex max-w-3xl items-center justify-center px-4 py-20">
+        <p className="font-medium text-blue-950">Loading document requirements…</p>
       </div>
     );
-  };
-
-  if (requirementsLoading) {
-    return <div className="max-w-5xl mx-auto p-8 text-blue-950">Loading document requirements...</div>;
   }
 
   return (
-    <div className="max-w-5xl mx-auto">
+    <div className="mx-auto max-w-3xl px-4 pb-12 sm:px-0">
+      <header className="mb-8">
+        <h1 className="text-3xl font-bold text-blue-950">My Documents</h1>
+        <p className="mt-2 text-gray-600">
+          Upload and manage compliance documents for your operating states.
+        </p>
+      </header>
+
       {drivingStates.length === 0 ? (
-        <div className="mb-6 rounded-2xl border border-amber-200 bg-amber-50 p-5">
-          <p className="font-medium text-amber-900">Select your operating states first</p>
+        <div className="mb-8 rounded-2xl border border-amber-200 bg-amber-50 p-5 sm:p-6">
+          <p className="font-semibold text-amber-900">Select your operating states first</p>
           <p className="mt-1 text-sm text-amber-800">
             {requirementsMessage ||
               'Choose the states where you plan to drive so we can show the correct required documents.'}
           </p>
           <Link
             href="/dashboard/profile"
-            className="mt-3 inline-block rounded-xl bg-[#1E3A8A] px-5 py-2 text-sm font-semibold text-white hover:bg-[#162D6B]"
+            className="mt-4 inline-flex rounded-xl bg-[#1E3A8A] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-900"
           >
             Set Operating States
           </Link>
         </div>
       ) : (
         <p className="mb-6 text-sm text-blue-800">
-          Requirements for: <span className="font-semibold">{formatStateList(drivingStates)}</span>
+          Requirements for{' '}
+          <span className="font-semibold">{formatStateList(drivingStates)}</span>
         </p>
       )}
 
-      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-end gap-4 mb-8">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">My Documents</h1>
-          <p className="text-gray-600">
-            Upload required documents to activate your account. PDF, JPG, PNG (max 10MB)
-          </p>
-        </div>
-        <div className="text-right">
-          <div className="text-4xl font-bold text-[#1E3A8A]">{progress}%</div>
-          <div className="text-sm text-gray-500">
-            {approvedCount} of {totalRequired} approved
+      <section className="mb-8 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm sm:p-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-medium text-gray-500">Approval progress</p>
+            <p className="mt-1 text-2xl font-bold text-blue-950">
+              {approvedCount} of {totalRequired} approved
+            </p>
+            <p className="mt-1 text-sm text-gray-500">{uploadedCount} uploaded</p>
           </div>
-          <div className="text-xs text-gray-400 mt-1">
-            {uploadedCount} uploaded
+          <div className="text-left sm:text-right">
+            <p className="text-4xl font-bold text-[#1E3A8A]">{progress}%</p>
+            <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+              Complete
+            </p>
           </div>
         </div>
-      </div>
+        <div className="mt-5 h-2.5 overflow-hidden rounded-full bg-gray-100">
+          <div
+            className="h-full rounded-full bg-emerald-500 transition-all duration-500"
+            style={{ width: `${progress}%` }}
+          />
+        </div>
+      </section>
 
-      <div className="h-3 bg-gray-100 rounded-full mb-10 overflow-hidden">
-        <div
-          className="h-3 bg-green-600 transition-all duration-500"
-          style={{ width: `${progress}%` }}
-        />
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="space-y-5">
         {requiredDocuments.map((doc) => {
           const existing = findDriverDocument(documents, doc.type);
-          const isUploading = uploading === doc.type;
-          const showExpiration = doc.requiresExpiration === true || !!doc.validityYears;
           const expiryValue =
             expiryDates[doc.type] ||
             (existing?.expires_at ? toDateInputValue(existing.expires_at) : '');
 
           return (
-            <div
-              id={`doc-${doc.type}`}
+            <DriverDocumentCard
               key={doc.type}
-              className="border border-gray-200 rounded-2xl p-6 bg-white hover:border-[#1E3A8A] transition-all scroll-mt-24"
-            >
-              <div className="flex justify-between items-start mb-4">
-                <h3 className="font-semibold text-lg">{doc.label}</h3>
-                {existing && getStatusBadge(existing)}
-              </div>
-
-              <div className="text-sm space-y-1.5 text-gray-600 mb-4">
-                <div>Cost: <span className={doc.cost.includes('Driver') ? 'text-orange-600' : 'text-green-600'}>{doc.cost}</span></div>
-                {formatDocumentValidity(doc) && <div>{formatDocumentValidity(doc)}</div>}
-                {doc.description && <p className="text-sm leading-relaxed text-gray-700">{doc.description}</p>}
-                {doc.specialNote && <div className="text-xs italic">{doc.specialNote}</div>}
-              </div>
-
-              {showExpiration && (
-                <div className="mb-4 p-4 border rounded-xl bg-gray-50">
-                  <div className="flex items-center justify-between gap-2 mb-2">
-                    <label htmlFor={`expiry-${doc.type}`} className="block text-sm font-medium">
-                      Expiration Date{doc.requiresExpiration ? ' *' : ''}
-                    </label>
-                    {renderExpirySaveStatus(doc.type)}
-                  </div>
-                  <input
-                    id={`expiry-${doc.type}`}
-                    type="date"
-                    required={doc.requiresExpiration}
-                    min={new Date().toISOString().split('T')[0]}
-                    value={expiryValue}
-                    onChange={(e) => handleExpiryChange(doc.type, e.target.value)}
-                    onBlur={() => handleExpiryBlur(doc.type)}
-                    className="w-full border border-gray-300 rounded-lg px-4 py-2 text-sm"
-                    aria-describedby={
-                      !existing && expiryValue ? `expiry-hint-${doc.type}` : undefined
-                    }
-                  />
-                  {formatDocumentValidity(doc) && (
-                    <p className="text-xs text-gray-500 mt-2">
-                      Typically {formatDocumentValidity(doc)?.toLowerCase()}
-                    </p>
-                  )}
-                  {!existing && expiryValue && (
-                    <p id={`expiry-hint-${doc.type}`} className="text-xs text-gray-500 mt-2">
-                      Date will be saved automatically when you upload this document.
-                    </p>
-                  )}
-                  {existing && (
-                    <p className="text-xs text-gray-500 mt-2">
-                      Changes save automatically.
-                    </p>
-                  )}
-                </div>
-              )}
-
-              {existing && (
-                <div className="mb-4">
-                  {getFilePreview(existing)}
-                  {existing.expires_at && (
-                    <p
-                      className={`text-xs mt-2 ${
-                        isDocumentExpired(existing.expires_at)
-                          ? 'text-red-600 font-medium'
-                          : 'text-gray-500'
-                      }`}
-                    >
-                      Expires: {new Date(existing.expires_at).toLocaleDateString()}
-                      {isDocumentExpired(existing.expires_at) && ' — expired, please re-upload'}
-                    </p>
-                  )}
-                  {existing.rejection_reason && (
-                    <p className="text-xs text-red-600 mt-2 border-l-2 border-red-300 pl-2">
-                      Reason: {existing.rejection_reason}
-                    </p>
-                  )}
-                </div>
-              )}
-
-              {doc.uploadable ? (
-                <label className="block w-full cursor-pointer">
-                  <input type="file" accept=".pdf,.jpg,.jpeg,.png" className="hidden" onChange={(e) => handleUpload(doc.type, e)} />
-                  <div className="text-center border-2 border-dashed border-gray-300 hover:border-[#1E3A8A] rounded-xl py-6 transition-colors">
-                    {isUploading ? 'Uploading...' : existing ? 'Replace Document' : 'Upload Document'}
-                  </div>
-                </label>
-              ) : (
-                <button className="w-full py-3 border border-[#1E3A8A] text-[#1E3A8A] rounded-xl hover:bg-gray-50">
-                  {doc.actionLabel || 'Manage'}
-                </button>
-              )}
-            </div>
+              doc={doc}
+              existing={existing}
+              expiryValue={expiryValue}
+              expirySaveStatus={expirySaveStatus[doc.type] ?? 'idle'}
+              expirySaveError={expirySaveError[doc.type]}
+              isUploading={uploading === doc.type}
+              onExpiryChange={(value) => handleExpiryChange(doc.type, value)}
+              onExpiryBlur={() => handleExpiryBlur(doc.type)}
+              onUpload={(event) => void handleUpload(doc.type, event)}
+              onPreview={setPreviewUrl}
+            />
           );
         })}
       </div>
 
+      {requiredDocuments.length === 0 && drivingStates.length > 0 && (
+        <div className="rounded-2xl border border-dashed border-gray-200 bg-white px-6 py-14 text-center">
+          <p className="text-gray-600">No document requirements found for your selected states.</p>
+        </div>
+      )}
+
       {previewUrl && (
-        <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4" onClick={() => setPreviewUrl(null)}>
-          <div className="relative max-w-4xl max-h-[90vh]" onClick={e => e.stopPropagation()}>
-            <img src={previewUrl} alt="Preview" className="max-w-full max-h-[90vh] rounded-lg shadow-2xl" />
-            <button onClick={() => setPreviewUrl(null)} className="absolute -top-4 -right-4 bg-white text-black w-10 h-10 rounded-full flex items-center justify-center text-2xl shadow-lg">✕</button>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4"
+          onClick={() => setPreviewUrl(null)}
+        >
+          <div
+            className="relative max-h-[90vh] max-w-4xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <img
+              src={previewUrl}
+              alt="Document preview"
+              className="max-h-[90vh] max-w-full rounded-lg shadow-2xl"
+            />
+            <button
+              type="button"
+              onClick={() => setPreviewUrl(null)}
+              className="absolute -right-3 -top-3 flex h-10 w-10 items-center justify-center rounded-full bg-white text-xl text-black shadow-lg"
+              aria-label="Close preview"
+            >
+              ×
+            </button>
           </div>
         </div>
       )}

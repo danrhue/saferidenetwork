@@ -10,32 +10,13 @@ import {
   tripFitsDriverCapacity,
   type DriverSeatingProfile,
 } from '@/lib/seating-validation';
-import TripMap from '../../components/TripMap';
-import TripMapPreview from '@/components/TripMapPreview';
+import BrowseTripRoutePlaceholder from '@/components/driver/BrowseTripRoutePlaceholder';
 import OrganizationLogo from '../../components/OrganizationLogo';
-import { truncateLocation } from '@/lib/rider/format';
+import type { BrowseTrip } from '@/lib/driver/open-trips';
 import { toDateInputValue } from '@/lib/driver/document-dates';
 import ProfileCompletionOfferGate from '@/components/driver/ProfileCompletionOfferGate';
 import { PROFILE_INCOMPLETE_OFFER_MESSAGE } from '@/lib/driver/offer-eligibility';
 import { useProfileCompletion } from '@/lib/driver/useProfileCompletion';
-
-interface Trip {
-  id: string;
-  title: string;
-  description: string | null;
-  pickup_location: string;
-  dropoff_location: string;
-  pickup_time: string;
-  price: number | null;
-  final_price: number | null;
-  status: string;
-  payment_status: string;
-  organization_id: string | null;
-  trip_source?: string | null;
-  organization_name?: string;
-  organization_photo_url?: string | null;
-  passengers?: number | null;
-}
 
 interface ExistingOffer {
   trip_id: string;
@@ -49,11 +30,12 @@ export default function BrowseTrips() {
     incompleteRequirements,
     refresh: refreshProfileCompletion,
   } = useProfileCompletion();
-  const [trips, setTrips] = useState<Trip[]>([]);
+  const [trips, setTrips] = useState<BrowseTrip[]>([]);
   const [existingOffers, setExistingOffers] = useState<Record<string, ExistingOffer>>({});
+  const [profileReady, setProfileReady] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedTrip, setSelectedTrip] = useState<Trip | null>(null);
+  const [selectedTrip, setSelectedTrip] = useState<BrowseTrip | null>(null);
   const [offerMessage, setOfferMessage] = useState('');
   const [offeredPrice, setOfferedPrice] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -64,7 +46,7 @@ export default function BrowseTrips() {
   const [minPrice, setMinPrice] = useState('');
   const [maxPrice, setMaxPrice] = useState('');
 
-  const getTripRate = (trip: Trip) => trip.final_price ?? trip.price;
+  const getTripRate = (trip: BrowseTrip) => trip.final_price ?? trip.price;
 
   const hasActiveFilters =
     !!searchTerm.trim() || !!dateFilter || !!minPrice || !!maxPrice;
@@ -77,8 +59,8 @@ export default function BrowseTrips() {
     return trips.filter((trip) => {
       if (query) {
         const haystack = [
-          trip.pickup_location,
-          trip.dropoff_location,
+          trip.pickup_area,
+          trip.dropoff_area,
           trip.title,
           trip.organization_name,
         ]
@@ -157,56 +139,20 @@ export default function BrowseTrips() {
         .single();
       setDriverSeating(seatingProf as DriverSeatingProfile);
 
-      const { data: tripsData, error: tripsError } = await supabase
-        .from('trips')
-        .select('*')
-        .eq('status', 'open')
-        .eq('payment_status', 'paid')
-        .order('pickup_time', { ascending: true });
+      const response = await authFetch('/api/driver/open-trips');
+      const data = await response.json();
 
-      if (tripsError) {
-        console.error('Trips fetch error:', tripsError);
-        setError(`Could not load trips: ${tripsError.message}`);
+      if (response.status === 403 && data.blocked) {
         setTrips([]);
         setLoading(false);
         return;
       }
 
-      if (!tripsData || tripsData.length === 0) {
-        setTrips([]);
-        setLoading(false);
-        return;
+      if (!response.ok) {
+        throw new Error(data.error || 'Could not load trips');
       }
 
-      const orgIds = [...new Set(tripsData.map((t) => t.organization_id).filter(Boolean))] as string[];
-      let profileMap: Record<string, { organization_name?: string; full_name?: string; profile_photo_url?: string | null }> = {};
-
-      if (orgIds.length > 0) {
-        const { data: profilesData, error: profilesError } = await supabase
-          .from('profiles')
-          .select('id, organization_name, full_name, profile_photo_url')
-          .in('id', orgIds);
-
-        if (profilesError) {
-          console.error('Profiles fetch error:', profilesError);
-        }
-
-        profileMap = Object.fromEntries((profilesData || []).map((p) => [p.id, p]));
-      }
-
-      const formatted: Trip[] = tripsData.map((trip) => {
-        const isRiderTrip = trip.trip_source === 'rider' || !trip.organization_id;
-        const profile = trip.organization_id ? profileMap[trip.organization_id] : null;
-        return {
-          ...trip,
-          organization_name: isRiderTrip
-            ? 'Personal Ride'
-            : profile?.organization_name || profile?.full_name || 'Organization',
-          organization_photo_url: isRiderTrip ? null : profile?.profile_photo_url || null,
-        };
-      });
-
-      setTrips(formatted);
+      setTrips(Array.isArray(data.trips) ? data.trips : []);
     } catch (err: unknown) {
       setError(getErrorMessage(err));
       setTrips([]);
@@ -216,11 +162,23 @@ export default function BrowseTrips() {
   }, [fetchExistingOffers]);
 
   useEffect(() => {
-    void fetchOpenTrips();
-    void refreshProfileCompletion();
-  }, [fetchOpenTrips, refreshProfileCompletion]);
+    void (async () => {
+      await refreshProfileCompletion();
+      setProfileReady(true);
+    })();
+  }, [refreshProfileCompletion]);
 
-  const openDetails = (trip: Trip) => {
+  useEffect(() => {
+    if (!profileReady) return;
+    if (!isProfileComplete) {
+      setTrips([]);
+      setLoading(false);
+      return;
+    }
+    void fetchOpenTrips();
+  }, [profileReady, isProfileComplete, fetchOpenTrips]);
+
+  const openDetails = (trip: BrowseTrip) => {
     setSelectedTrip(trip);
     setOfferMessage('');
     setSubmitError(null);
@@ -239,7 +197,7 @@ export default function BrowseTrips() {
   const canSubmitOffers =
     isProfileComplete && (seatingEligibility?.ok ?? false);
 
-  const tripCapacityOk = (trip: Trip) =>
+  const tripCapacityOk = (trip: BrowseTrip) =>
     driverSeating
       ? tripFitsDriverCapacity(trip.passengers, driverSeating.passenger_capacity).ok
       : false;
@@ -328,10 +286,28 @@ export default function BrowseTrips() {
     }
   };
 
-  if (loading) {
+  if (!profileReady || (isProfileComplete && loading)) {
     return (
       <div className="flex items-center justify-center py-20">
         <div className="text-blue-950 font-medium">Loading available trips...</div>
+      </div>
+    );
+  }
+
+  if (!isProfileComplete) {
+    return (
+      <div>
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-blue-950">Browse Available Trips</h1>
+          <p className="mt-1 text-blue-900">
+            Finish your profile and compliance requirements to unlock the trip marketplace.
+          </p>
+        </div>
+        <ProfileCompletionOfferGate
+          profileCompletion={profileCompletion}
+          incompleteRequirements={incompleteRequirements}
+          purpose="browse"
+        />
       </div>
     );
   }
@@ -342,7 +318,8 @@ export default function BrowseTrips() {
         <div>
           <h1 className="text-3xl font-bold text-blue-950">Browse Available Trips</h1>
           <p className="text-blue-900 mt-1">
-            View open, paid trips from organizations and submit your offers to drive.
+            View open, paid trips by general area and submit your offers to drive. Full addresses
+            are shown after you are assigned.
           </p>
         </div>
         <div className="flex gap-2">
@@ -364,15 +341,6 @@ export default function BrowseTrips() {
       {error && (
         <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm">
           {error}
-        </div>
-      )}
-
-      {!isProfileComplete && (
-        <div className="mb-6">
-          <ProfileCompletionOfferGate
-            profileCompletion={profileCompletion}
-            incompleteRequirements={incompleteRequirements}
-          />
         </div>
       )}
 
@@ -399,11 +367,11 @@ export default function BrowseTrips() {
           <div className="flex flex-wrap gap-4 items-end">
             <div className="flex-1 min-w-[200px]">
               <label className="block text-sm font-medium text-blue-900 mb-1">
-                Search locations
+                Search areas
               </label>
               <input
                 type="text"
-                placeholder="Pickup, dropoff, title, or organization..."
+                placeholder="Pickup area, dropoff area, title, or organization..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full border-2 border-blue-200 rounded-xl px-4 py-2.5 text-blue-950 placeholder:text-blue-800/50 focus:border-[#1E3A8A] focus:outline-none focus:ring-2 focus:ring-blue-200"
@@ -504,9 +472,9 @@ export default function BrowseTrips() {
                 className="bg-white border border-blue-200 rounded-2xl overflow-hidden flex flex-col shadow-sm hover:shadow-md hover:border-blue-300 transition"
               >
                 <div className="relative bg-gray-100">
-                  <TripMapPreview
-                    pickup={trip.pickup_location}
-                    dropoff={trip.dropoff_location}
+                  <BrowseTripRoutePlaceholder
+                    pickupArea={trip.pickup_area}
+                    dropoffArea={trip.dropoff_area}
                   />
                   <span className="absolute top-3 left-3 bg-white/95 px-3 py-1 rounded-full text-xs font-semibold text-blue-950 shadow-sm">
                     {trip.organization_name}
@@ -525,14 +493,15 @@ export default function BrowseTrips() {
                           {trip.title}
                         </h3>
                         <div className="text-sm text-blue-900 mt-1">
-                          <span className="font-medium text-green-700">
-                            {truncateLocation(trip.pickup_location, 36)}
-                          </span>
+                          <span className="font-medium text-green-700">{trip.pickup_area}</span>
                           <span className="mx-1 text-[#1E3A8A]">→</span>
-                          <span className="font-medium text-red-600">
-                            {truncateLocation(trip.dropoff_location, 36)}
-                          </span>
+                          <span className="font-medium text-red-600">{trip.dropoff_area}</span>
                         </div>
+                        {trip.distance_miles != null && (
+                          <p className="mt-1 text-xs text-gray-500">
+                            {trip.distance_miles} mi
+                          </p>
+                        )}
                       </div>
                     </div>
                     <div className="text-right shrink-0">
@@ -542,10 +511,6 @@ export default function BrowseTrips() {
                       <div className="text-xs text-gray-500">posted rate</div>
                     </div>
                   </div>
-
-                  {trip.description && (
-                    <p className="text-sm text-blue-900 mb-4 line-clamp-2">{trip.description}</p>
-                  )}
 
                   {existing && (
                     <div className="mb-3 text-xs font-medium text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
@@ -567,11 +532,7 @@ export default function BrowseTrips() {
                       onClick={() => openDetails(trip)}
                       className="shrink-0 px-5 py-2.5 bg-[#1E3A8A] hover:bg-blue-900 active:bg-blue-950 text-white rounded-xl text-sm font-semibold shadow-sm transition"
                     >
-                      {existing
-                        ? 'View Trip'
-                        : isProfileComplete
-                          ? 'View Details & Offer'
-                          : 'View Details'}
+                      {existing ? 'View Trip' : 'View Details & Offer'}
                     </button>
                   </div>
                 </div>
@@ -604,36 +565,35 @@ export default function BrowseTrips() {
             </div>
 
             <div className="p-6 space-y-4">
-              <div>
-                <div className="text-sm font-semibold text-blue-950 mb-2">Route</div>
-                <TripMap
-                  pickup={selectedTrip.pickup_location}
-                  dropoff={selectedTrip.dropoff_location}
-                />
-              </div>
-
-              {selectedTrip.description && (
-                <div>
-                  <div className="text-sm font-semibold text-blue-950">Description</div>
-                  <p className="text-blue-950 mt-1">{selectedTrip.description}</p>
-                </div>
-              )}
+              <BrowseTripRoutePlaceholder
+                pickupArea={selectedTrip.pickup_area}
+                dropoffArea={selectedTrip.dropoff_area}
+                className="h-44 rounded-xl border border-blue-100"
+              />
 
               <div className="grid grid-cols-2 gap-x-8 gap-y-3 text-sm text-blue-950">
                 <div>
-                  <span className="font-semibold text-blue-900">Pickup:</span> {selectedTrip.pickup_location}
+                  <span className="font-semibold text-blue-900">Pickup area:</span>{' '}
+                  {selectedTrip.pickup_area}
                 </div>
                 <div>
-                  <span className="font-semibold text-blue-900">Dropoff:</span> {selectedTrip.dropoff_location}
+                  <span className="font-semibold text-blue-900">Dropoff area:</span>{' '}
+                  {selectedTrip.dropoff_area}
                 </div>
                 <div>
-                  <span className="font-semibold text-blue-900">Pickup Time:</span>{' '}
+                  <span className="font-semibold text-blue-900">Pickup time:</span>{' '}
                   {new Date(selectedTrip.pickup_time).toLocaleString()}
                 </div>
                 <div>
-                  <span className="font-semibold text-blue-900">Posted Rate:</span> $
+                  <span className="font-semibold text-blue-900">Posted rate:</span> $
                   {selectedTrip.final_price || selectedTrip.price}
                 </div>
+                {selectedTrip.distance_miles != null && (
+                  <div>
+                    <span className="font-semibold text-blue-900">Distance:</span>{' '}
+                    {selectedTrip.distance_miles} mi
+                  </div>
+                )}
                 <div>
                   <span className="font-semibold text-blue-900">Passengers:</span>{' '}
                   {selectedTrip.passengers || 1}
@@ -664,12 +624,6 @@ export default function BrowseTrips() {
                     View in My Offers →
                   </Link>
                 </div>
-              ) : !isProfileComplete ? (
-                <ProfileCompletionOfferGate
-                  profileCompletion={profileCompletion}
-                  incompleteRequirements={incompleteRequirements}
-                  compact
-                />
               ) : (
                 <>
                   <div className="pt-4 border-t">
@@ -719,7 +673,7 @@ export default function BrowseTrips() {
               >
                 Close
               </button>
-              {!existingOffers[selectedTrip.id] && isProfileComplete && (
+              {!existingOffers[selectedTrip.id] && (
                 <button
                   onClick={submitOffer}
                   disabled={
