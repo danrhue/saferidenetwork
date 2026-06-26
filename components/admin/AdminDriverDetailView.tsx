@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import AdminImagePreviewModal from '@/components/admin/AdminImagePreviewModal';
 import {
@@ -12,7 +12,12 @@ import type {
   AdminDriverAssignedTrip,
   AdminDriverDetail,
   AdminDriverDocument,
+  AdminDriverOnboardingStatus,
 } from '@/lib/admin/driver-detail';
+import type {
+  AdminComplianceItem,
+  AdminComplianceItemStatus,
+} from '@/lib/admin/driver-onboarding-status';
 import { formatAdminTripPayout } from '@/lib/admin/driver-assigned-trips';
 import { getDocumentDisplayLabel, sortDocumentsForReview } from '@/lib/driver/document-display';
 import {
@@ -64,6 +69,123 @@ function ProfileField({ label, value }: { label: string; value: string }) {
       <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">{label}</p>
       <p className="mt-1 whitespace-pre-line text-sm text-blue-950">{value}</p>
     </div>
+  );
+}
+
+function ProfileSection({
+  title,
+  children,
+  className = '',
+}: {
+  title: string;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <section className={`md:col-span-2 ${className}`}>
+      <h2 className="mb-4 border-b border-blue-50 pb-2 text-sm font-semibold uppercase tracking-wide text-[#1E3A8A]">
+        {title}
+      </h2>
+      {children}
+    </section>
+  );
+}
+
+function complianceStatusClass(status: AdminComplianceItemStatus): string {
+  if (status === 'complete') return 'bg-green-100 text-green-700';
+  if (status === 'pending') return 'bg-amber-100 text-amber-800';
+  if (status === 'rejected') return 'bg-red-100 text-red-700';
+  if (status === 'optional') return 'bg-slate-100 text-slate-600';
+  return 'bg-gray-100 text-gray-700';
+}
+
+function complianceStatusLabel(status: AdminComplianceItemStatus): string {
+  if (status === 'complete') return 'Complete';
+  if (status === 'pending') return 'Pending';
+  if (status === 'rejected') return 'Rejected';
+  if (status === 'optional') return 'Optional';
+  return 'Incomplete';
+}
+
+function accountStatusClass(tone: AdminDriverOnboardingStatus['accountStatusTone']): string {
+  if (tone === 'green') return 'bg-green-100 text-green-800';
+  if (tone === 'red') return 'bg-red-100 text-red-800';
+  return 'bg-amber-100 text-amber-800';
+}
+
+function OnboardingProgressPanel({ status }: { status: AdminDriverOnboardingStatus }) {
+  const completedCount = status.steps.filter((step) => step.complete).length;
+
+  return (
+    <ProfileSection title="Onboarding Progress">
+      <div className="mb-5">
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
+          <p className="text-2xl font-bold text-blue-950">{status.completionPercent}%</p>
+          <span
+            className={`rounded-full px-3 py-1 text-xs font-semibold ${accountStatusClass(status.accountStatusTone)}`}
+          >
+            {status.accountStatusLabel}
+          </span>
+        </div>
+        <div className="h-3 overflow-hidden rounded-full bg-blue-50">
+          <div
+            className="h-full rounded-full bg-[#1E3A8A] transition-all"
+            style={{ width: `${status.completionPercent}%` }}
+          />
+        </div>
+        <p className="mt-2 text-sm text-blue-800">
+          {completedCount} of {status.steps.length} onboarding steps complete
+        </p>
+      </div>
+
+      <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        {status.steps.map((step) => (
+          <li
+            key={step.id}
+            className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm ${
+              step.complete
+                ? 'border-green-100 bg-green-50 text-green-900'
+                : 'border-amber-100 bg-amber-50 text-amber-900'
+            }`}
+          >
+            <span aria-hidden className="text-base">
+              {step.complete ? '✓' : '○'}
+            </span>
+            <span>
+              <span className="font-medium">{step.title}</span>
+              <span className="ml-1 text-xs opacity-80">
+                {step.complete ? 'Complete' : 'Pending'}
+              </span>
+            </span>
+          </li>
+        ))}
+      </ul>
+    </ProfileSection>
+  );
+}
+
+function ComplianceStatusPanel({ items }: { items: AdminComplianceItem[] }) {
+  return (
+    <ProfileSection title="Compliance Status">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+        {items.map((item) => (
+          <div
+            key={item.id}
+            className="rounded-xl border border-blue-50 bg-slate-50/60 p-4"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <p className="font-medium text-blue-950">{item.label}</p>
+              <span
+                className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${complianceStatusClass(item.status)}`}
+              >
+                {complianceStatusLabel(item.status)}
+              </span>
+            </div>
+            <p className="mt-2 text-sm text-blue-800">{item.detail}</p>
+          </div>
+        ))}
+      </div>
+    </ProfileSection>
   );
 }
 
@@ -149,7 +271,7 @@ export default function AdminDriverDetailView({
     );
   }
 
-  const { driver, documents, photoAudit, assignedTrips } = detail;
+  const { driver, documents, photoAudit, assignedTrips, onboardingStatus } = detail;
   const driverName = formatAdminDriverName(driver);
   const photoStatus = (driver.profile_photo_status ?? null) as ProfilePhotoStatus | null;
 
@@ -221,120 +343,155 @@ export default function AdminDriverDetailView({
       <div className="rounded-2xl border border-blue-100 bg-white p-6 shadow-sm">
         {activeTab === 'profile' && (
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-            <ProfileField label="Name" value={driverName} />
-            <ProfileField label="Email" value={driver.email || '—'} />
-            <ProfileField
-              label="Phone"
-              value={
-                driver.phone
-                  ? `${driver.phone}${driver.phone_type ? ` (${driver.phone_type})` : ''}`
-                  : '—'
-              }
-            />
-            <ProfileField label="Gender" value={driver.gender || '—'} />
-            <ProfileField
-              label="Operating States"
-              value={
-                Array.isArray(driver.driving_states) && driver.driving_states.length > 0
-                  ? formatStateList(driver.driving_states)
-                  : '—'
-              }
-            />
-            <ProfileField
-              label="Vehicle"
-              value={
-                driver.vehicle_year && driver.vehicle_make && driver.vehicle_model
-                  ? `${driver.vehicle_year} ${driver.vehicle_make} ${driver.vehicle_model}`
-                  : '—'
-              }
-            />
-            <ProfileField
-              label="Passenger Capacity"
-              value={
-                driver.passenger_capacity != null ? String(driver.passenger_capacity) : '—'
-              }
-            />
-            <div className="md:col-span-2">
-              <ProfileField
-                label="Physical Address"
-                value={
-                  [
-                    driver.physical_address_line1,
-                    driver.physical_address_line2,
-                    [driver.physical_city, driver.physical_state, driver.physical_postal_code]
-                      .filter(Boolean)
-                      .join(', '),
-                  ]
-                    .filter(Boolean)
-                    .join('\n') || '—'
-                }
-              />
-            </div>
-            <div className="md:col-span-2">
-              <ProfileField
-                label="Mailing Address"
-                value={
-                  driver.mailing_same_as_physical !== false
-                    ? 'Same as physical address'
-                    : [
-                        driver.mailing_address_line1,
-                        driver.mailing_address_line2,
-                        [driver.mailing_city, driver.mailing_state, driver.mailing_postal_code]
-                          .filter(Boolean)
-                          .join(', '),
-                      ]
+            <OnboardingProgressPanel status={onboardingStatus} />
+            <ComplianceStatusPanel items={onboardingStatus.complianceItems} />
+
+            <ProfileSection title="Personal Information">
+              <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                <ProfileField label="Name" value={driverName} />
+                <ProfileField label="Email" value={driver.email || '—'} />
+                <ProfileField
+                  label="Phone"
+                  value={
+                    driver.phone
+                      ? `${driver.phone}${driver.phone_type ? ` (${driver.phone_type})` : ''}`
+                      : '—'
+                  }
+                />
+                <ProfileField label="Gender" value={driver.gender || '—'} />
+                <ProfileField
+                  label="Operating States"
+                  value={
+                    Array.isArray(driver.driving_states) && driver.driving_states.length > 0
+                      ? formatStateList(driver.driving_states)
+                      : '—'
+                  }
+                />
+                <ProfileField
+                  label="Date of Birth"
+                  value={
+                    driver.dob_month && driver.dob_day && driver.dob_year
+                      ? `${driver.dob_month}/${driver.dob_day}/${driver.dob_year}`
+                      : '—'
+                  }
+                />
+                <ProfileField
+                  label="Height / Weight"
+                  value={
+                    driver.height_feet != null && driver.height_inches != null
+                      ? `${driver.height_feet}' ${driver.height_inches}" · ${driver.weight_lbs ?? '—'} lbs`
+                      : '—'
+                  }
+                />
+                <ProfileField
+                  label="Hair / Eyes"
+                  value={`${driver.hair_color || '—'} / ${driver.eye_color || '—'}`}
+                />
+                <ProfileField
+                  label="SSN"
+                  value={
+                    driver.ssn ? `••••••${String(driver.ssn).slice(-4)}` : 'Not provided'
+                  }
+                />
+              </div>
+            </ProfileSection>
+
+            <ProfileSection title="Vehicle Information">
+              <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                <ProfileField
+                  label="Year / Make / Model"
+                  value={
+                    driver.vehicle_year && driver.vehicle_make && driver.vehicle_model
+                      ? `${driver.vehicle_year} ${driver.vehicle_make} ${driver.vehicle_model}`
+                      : '—'
+                  }
+                />
+                <ProfileField
+                  label="Passenger Capacity"
+                  value={
+                    driver.passenger_capacity != null ? String(driver.passenger_capacity) : '—'
+                  }
+                />
+                <ProfileField
+                  label="Seating Approval"
+                  value={
+                    driver.seating_approval_status
+                      ? String(driver.seating_approval_status).replace(/_/g, ' ')
+                      : 'approved'
+                  }
+                />
+                {driver.seating_override_note && (
+                  <div className="md:col-span-2">
+                    <ProfileField
+                      label="Seating Override Note"
+                      value={driver.seating_override_note}
+                    />
+                  </div>
+                )}
+              </div>
+            </ProfileSection>
+
+            <ProfileSection title="Addresses">
+              <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                <ProfileField
+                  label="Physical Address"
+                  value={
+                    [
+                      driver.physical_address_line1,
+                      driver.physical_address_line2,
+                      [driver.physical_city, driver.physical_state, driver.physical_postal_code]
                         .filter(Boolean)
-                        .join('\n') || '—'
-                }
-              />
-            </div>
-            <ProfileField
-              label="Driver's License"
-              value={
-                driver.drivers_license_number
-                  ? `${driver.drivers_license_number}${driver.drivers_license_state ? ` (${driver.drivers_license_state})` : ''}`
-                  : '—'
-              }
-            />
-            <ProfileField
-              label="License Expires"
-              value={
-                driver.drivers_license_exp_month &&
-                driver.drivers_license_exp_day &&
-                driver.drivers_license_exp_year
-                  ? `${driver.drivers_license_exp_month}/${driver.drivers_license_exp_day}/${driver.drivers_license_exp_year}`
-                  : '—'
-              }
-            />
-            <ProfileField
-              label="Date of Birth"
-              value={
-                driver.dob_month && driver.dob_day && driver.dob_year
-                  ? `${driver.dob_month}/${driver.dob_day}/${driver.dob_year}`
-                  : '—'
-              }
-            />
-            <ProfileField
-              label="SSN"
-              value={
-                driver.ssn ? `••••••${String(driver.ssn).slice(-4)}` : 'Not provided'
-              }
-            />
-            <ProfileField
-              label="Height / Weight"
-              value={
-                driver.height_feet != null && driver.height_inches != null
-                  ? `${driver.height_feet}' ${driver.height_inches}" · ${driver.weight_lbs ?? '—'} lbs`
-                  : '—'
-              }
-            />
-            <ProfileField
-              label="Hair / Eyes"
-              value={`${driver.hair_color || '—'} / ${driver.eye_color || '—'}`}
-            />
-            <div className="md:col-span-2 border-t border-gray-100 pt-4">
+                        .join(', '),
+                    ]
+                      .filter(Boolean)
+                      .join('\n') || '—'
+                  }
+                />
+                <ProfileField
+                  label="Mailing Address"
+                  value={
+                    driver.mailing_same_as_physical !== false
+                      ? 'Same as physical address'
+                      : [
+                          driver.mailing_address_line1,
+                          driver.mailing_address_line2,
+                          [driver.mailing_city, driver.mailing_state, driver.mailing_postal_code]
+                            .filter(Boolean)
+                            .join(', '),
+                        ]
+                          .filter(Boolean)
+                          .join('\n') || '—'
+                  }
+                />
+              </div>
+            </ProfileSection>
+
+            <ProfileSection title="Driver's License">
+              <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                <ProfileField
+                  label="License Number"
+                  value={
+                    driver.drivers_license_number
+                      ? `${driver.drivers_license_number}${driver.drivers_license_state ? ` (${driver.drivers_license_state})` : ''}`
+                      : '—'
+                  }
+                />
+                <ProfileField
+                  label="Expires"
+                  value={
+                    driver.drivers_license_exp_month &&
+                    driver.drivers_license_exp_day &&
+                    driver.drivers_license_exp_year
+                      ? `${driver.drivers_license_exp_month}/${driver.drivers_license_exp_day}/${driver.drivers_license_exp_year}`
+                      : '—'
+                  }
+                />
+              </div>
+            </ProfileSection>
+
+            <ProfileSection title="Emergency Contact">
               <ProfileField
-                label="Emergency Contact"
+                label="Contact"
                 value={[
                   [driver.emergency_contact_first_name, driver.emergency_contact_last_name]
                     .filter(Boolean)
@@ -349,7 +506,7 @@ export default function AdminDriverDetailView({
                   .filter(Boolean)
                   .join('\n')}
               />
-            </div>
+            </ProfileSection>
           </div>
         )}
 

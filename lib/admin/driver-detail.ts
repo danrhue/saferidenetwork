@@ -6,10 +6,15 @@ import {
   fetchAssignedTripsForDriver,
   type AdminDriverAssignedTrip,
 } from '@/lib/admin/driver-assigned-trips';
+import {
+  buildAdminDriverOnboardingStatus,
+  loadRequiredDocumentsForDriver,
+  type AdminDriverOnboardingStatus,
+} from '@/lib/admin/driver-onboarding-status';
 import { fetchProfilePhotoAuditHistory } from '@/lib/admin/profile-photo-review';
 import { resolveProfilePhotoUrl } from '@/lib/storage/profile-photos';
 
-export type { AdminDriverAssignedTrip };
+export type { AdminDriverAssignedTrip, AdminDriverOnboardingStatus };
 
 export type AdminDriverDocument = {
   id: string;
@@ -34,6 +39,7 @@ export type AdminDriverDetail = {
   documents: AdminDriverDocument[];
   photoAudit: Awaited<ReturnType<typeof fetchProfilePhotoAuditHistory>>;
   assignedTrips: AdminDriverAssignedTrip[];
+  onboardingStatus: AdminDriverOnboardingStatus;
 };
 
 export async function getAdminDriverDetail(
@@ -68,11 +74,25 @@ export async function getAdminDriverDetail(
     throw new Error(docsError.message);
   }
 
+  const requiredDocuments = await loadRequiredDocumentsForDriver(
+    admin,
+    enriched.driving_states as string[] | null | undefined
+  );
+
   const [signedDocuments, photoAudit, assignedTrips] = await Promise.all([
     withSignedDocumentUrls(admin, documents ?? []),
     fetchProfilePhotoAuditHistory(admin, driverId),
     fetchAssignedTripsForDriver(admin, driverId),
   ]);
+
+  const onboardingStatus = buildAdminDriverOnboardingStatus(
+    {
+      ...enriched,
+      mailing_same_as_physical: enriched.mailing_same_as_physical !== false,
+    },
+    documents ?? [],
+    requiredDocuments
+  );
 
   return {
     driver: {
@@ -82,5 +102,6 @@ export async function getAdminDriverDetail(
     documents: signedDocuments,
     photoAudit,
     assignedTrips,
+    onboardingStatus,
   };
 }
