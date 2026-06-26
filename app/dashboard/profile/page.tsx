@@ -9,11 +9,12 @@ import { getErrorMessage } from '@/lib/errors';
 import DriverOnboardingWizard from '@/components/driver/DriverOnboardingWizard';
 import { saveDriverPersonalProfile } from '@/lib/driver/profile-save';
 import { useRequiredDriverDocuments } from '@/lib/driver/useRequiredDriverDocuments';
+import ProfilePhotoRejectionPanel from '@/components/driver/ProfilePhotoRejectionPanel';
 import {
-  removeProfilePhoto,
-  resolveProfilePhotoForProfile,
-  uploadProfilePhoto as persistProfilePhoto,
-} from '@/lib/storage/profile-photos';
+  deleteDriverProfilePhoto,
+  submitDriverProfilePhoto,
+} from '@/lib/driver/profile-photo-upload';
+import { resolveProfilePhotoForProfile } from '@/lib/storage/profile-photos';
 
 const MAX_PHOTO_SIZE = 5 * 1024 * 1024; // 5MB
 
@@ -162,41 +163,15 @@ export default function DriverProfile() {
 
   const uploadProfilePhoto = async (file: File) => {
     if (!user) return;
-    if (file.size > MAX_PHOTO_SIZE) {
-      alert('Photo too large. Max 5MB.');
-      return;
-    }
-    const allowed = ['image/jpeg', 'image/png'];
-    if (!allowed.includes(file.type)) {
-      alert('Please upload JPG or PNG only.');
-      return;
-    }
     setUploadingProfile(true);
     try {
-      const { path, error: upErr } = await persistProfilePhoto(supabase, user.id, file);
-      if (upErr) throw upErr;
-
-      const { error: dbErr } = await supabase
-        .from('profiles')
-        .update({
-          profile_photo_url: path,
-          profile_photo_status: 'pending',
-          profile_photo_rejection_reason: null,
-        })
-        .eq('id', user.id);
-      if (dbErr) throw dbErr;
-
+      const { path, photoUrl } = await submitDriverProfilePhoto(supabase, user.id, file);
       setProfile((p: any) => ({
         ...p,
         profile_photo_url: path,
         profile_photo_status: 'pending',
         profile_photo_rejection_reason: null,
       }));
-      const photoUrl = await resolveProfilePhotoForProfile(
-        supabase,
-        { profile_photo_url: path, profile_photo_status: 'pending' },
-        { isOwner: true }
-      );
       setProfilePhotoUrl(photoUrl);
       alert('Profile photo submitted for review!');
     } catch (e: any) {
@@ -209,15 +184,7 @@ export default function DriverProfile() {
   const deleteProfilePhoto = async () => {
     if (!profile?.profile_photo_url || !user) return;
     try {
-      await removeProfilePhoto(supabase, profile.profile_photo_url);
-      await supabase
-        .from('profiles')
-        .update({
-          profile_photo_url: null,
-          profile_photo_status: null,
-          profile_photo_rejection_reason: null,
-        })
-        .eq('id', user.id);
+      await deleteDriverProfilePhoto(supabase, user.id, profile.profile_photo_url);
       setProfile((p: any) => ({
         ...p,
         profile_photo_url: null,
@@ -364,8 +331,19 @@ export default function DriverProfile() {
 
   if (loading) return <div className="p-8">Loading profile...</div>;
 
+  const photoRejected = profile?.profile_photo_status === 'rejected';
+
   return (
     <div className="max-w-5xl">
+      {photoRejected && profile?.role !== 'organization' && (
+        <ProfilePhotoRejectionPanel
+          photoUrl={profilePhotoUrl}
+          rejectionReason={profile?.profile_photo_rejection_reason ?? null}
+          uploading={uploadingProfile}
+          onUpload={uploadProfilePhoto}
+        />
+      )}
+
       {profile?.role === 'organization' && (
         <h1 className="text-3xl font-bold text-gray-900 mb-2">My Profile</h1>
       )}

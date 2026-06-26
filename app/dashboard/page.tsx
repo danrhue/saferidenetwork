@@ -1,16 +1,21 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import PendingTasksSection from '@/components/driver/PendingTasksSection';
+import ProfilePhotoRejectionPanel from '@/components/driver/ProfilePhotoRejectionPanel';
+import { submitDriverProfilePhoto } from '@/lib/driver/profile-photo-upload';
 import { useDriverOverview } from '@/lib/driver/useDriverOverview';
+import { resolveProfilePhotoForProfile } from '@/lib/storage/profile-photos';
 
 export default function DashboardOverview() {
-  const [user, setUser] = useState<{ email?: string; user_metadata?: { full_name?: string } } | null>(
+  const [user, setUser] = useState<{ id?: string; email?: string; user_metadata?: { full_name?: string } } | null>(
     null
   );
-  const { loading, pendingTasks, stats } = useDriverOverview();
+  const { loading, pendingTasks, stats, profile, refresh } = useDriverOverview();
+  const [profilePhotoUrl, setProfilePhotoUrl] = useState<string | null>(null);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
   useEffect(() => {
     const getUser = async () => {
@@ -22,6 +27,36 @@ export default function DashboardOverview() {
 
     getUser();
   }, []);
+
+  useEffect(() => {
+    const loadPhoto = async () => {
+      if (profile.profile_photo_url) {
+        const url = await resolveProfilePhotoForProfile(supabase, profile, { isOwner: true });
+        setProfilePhotoUrl(url);
+      } else {
+        setProfilePhotoUrl(null);
+      }
+    };
+    void loadPhoto();
+  }, [profile]);
+
+  const handlePhotoReupload = useCallback(
+    async (file: File) => {
+      if (!user?.id) return;
+      setUploadingPhoto(true);
+      try {
+        const { photoUrl } = await submitDriverProfilePhoto(supabase, user.id, file);
+        setProfilePhotoUrl(photoUrl);
+        await refresh();
+        alert('New photo submitted for review!');
+      } catch (e: unknown) {
+        alert('Upload failed: ' + (e instanceof Error ? e.message : 'Unknown error'));
+      } finally {
+        setUploadingPhoto(false);
+      }
+    },
+    [user?.id, refresh]
+  );
 
   if (loading) {
     return <div className="p-8 text-blue-950">Loading your overview...</div>;
@@ -35,8 +70,32 @@ export default function DashboardOverview() {
         ? 'text-red-600'
         : 'text-amber-600';
 
+  const photoPending =
+    profile.profile_photo_status === 'pending' && Boolean(profile.profile_photo_url);
+  const photoRejected = profile.profile_photo_status === 'rejected';
+
   return (
     <div>
+      {photoRejected && (
+        <ProfilePhotoRejectionPanel
+          photoUrl={profilePhotoUrl}
+          rejectionReason={
+            typeof profile.profile_photo_rejection_reason === 'string'
+              ? profile.profile_photo_rejection_reason
+              : null
+          }
+          uploading={uploadingPhoto}
+          onUpload={handlePhotoReupload}
+        />
+      )}
+
+      {photoPending && !photoRejected && (
+        <div className="mb-8 rounded-2xl border border-amber-200 bg-amber-50 px-6 py-4 text-sm text-amber-900">
+          <strong>Profile photo awaiting approval.</strong> You can keep using the driver portal
+          while our team reviews your photo. It will not appear to riders until approved.
+        </div>
+      )}
+
       <div className="mb-8 flex items-center gap-4">
         <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center overflow-hidden rounded-full border border-blue-200 bg-blue-50">
           <div className="flex h-full w-full items-center justify-center text-xl text-blue-950">👤</div>

@@ -40,6 +40,13 @@ export function isProfilePhotoApproved(profile: ProfilePhotoFields): boolean {
   );
 }
 
+/** Onboarding counts uploaded photos as complete, including those awaiting admin review. */
+export function hasProfilePhotoForOnboarding(profile: ProfilePhotoFields): boolean {
+  if (!profile.profile_photo_url) return false;
+  const status = normalizeProfilePhotoStatus(profile.profile_photo_status ?? null);
+  return status === 'pending' || status === 'approved';
+}
+
 export function profilePhotoStatusLabel(status: ProfilePhotoStatus | null): string {
   switch (status) {
     case 'pending':

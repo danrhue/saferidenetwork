@@ -243,14 +243,6 @@ function buildProfileTasks(profile: PersonalProfile): PendingTask[] {
       '/dashboard/profile?step=7',
       'low'
     );
-  } else if (profile.profile_photo_status === 'pending') {
-    addTask(
-      'profile-photo-pending',
-      'Profile photo awaiting approval',
-      'Your photo is under admin review. You will be notified once it is approved.',
-      '/dashboard/profile?step=7',
-      'low'
-    );
   } else if (profile.profile_photo_status === 'rejected') {
     addTask(
       'profile-photo-rejected',
@@ -258,7 +250,7 @@ function buildProfileTasks(profile: PersonalProfile): PendingTask[] {
       profile.profile_photo_rejection_reason
         ? `Rejected: ${profile.profile_photo_rejection_reason}`
         : 'Your profile photo was rejected. Please upload a new one.',
-      '/dashboard/profile?step=7',
+      '/dashboard',
       'medium'
     );
   }

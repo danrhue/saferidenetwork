@@ -575,6 +575,7 @@ function PhotoStep({
         uploading={uploading}
         onUpload={onUpload}
         onDelete={onDelete}
+        onboardingMode
       />
     </div>
   );

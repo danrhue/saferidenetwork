@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { requireAdminUser } from '@/lib/admin-auth';
+import { reviewDriverProfilePhotos } from '@/lib/admin/profile-photo-review';
 
 export const dynamic = 'force-dynamic';
 
@@ -9,60 +10,40 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
 
-  const { profileId, status, reason } = await request.json();
+  const body = await request.json();
+  const { profileId, profileIds, status, reason } = body;
 
-  if (!profileId || !['approved', 'rejected'].includes(status)) {
-    return NextResponse.json({ error: 'Invalid profileId or status' }, { status: 400 });
+  if (!['approved', 'rejected'].includes(status)) {
+    return NextResponse.json({ error: 'Invalid status' }, { status: 400 });
   }
 
-  if (status === 'rejected') {
-    const trimmed = typeof reason === 'string' ? reason.trim() : '';
-    if (!trimmed) {
-      return NextResponse.json(
-        { error: 'A rejection reason is required' },
-        { status: 400 }
-      );
-    }
-  }
+  const ids: string[] = Array.isArray(profileIds)
+    ? profileIds
+    : profileId
+      ? [profileId]
+      : [];
 
-  const { data: driver, error: driverError } = await auth.admin
-    .from('profiles')
-    .select('id, profile_photo_status, profile_photo_url')
-    .eq('id', profileId)
-    .eq('role', 'driver')
-    .single();
+  const result = await reviewDriverProfilePhotos(
+    auth.admin,
+    auth.user.id,
+    ids,
+    status,
+    typeof reason === 'string' ? reason : undefined
+  );
 
-  if (driverError || !driver) {
-    return NextResponse.json({ error: 'Driver not found' }, { status: 404 });
-  }
-
-  if (driver.profile_photo_status !== 'pending' || !driver.profile_photo_url) {
+  if (result.succeeded.length === 0 && result.failed.length > 0) {
     return NextResponse.json(
-      { error: 'This driver does not have a pending profile photo' },
+      {
+        error: result.failed[0]?.error ?? 'Review failed',
+        failed: result.failed,
+      },
       { status: 400 }
     );
   }
 
-  const now = new Date().toISOString();
-  const updateData: {
-    profile_photo_status: string;
-    profile_photo_rejection_reason: string | null;
-    updated_at: string;
-  } = {
-    profile_photo_status: status,
-    profile_photo_rejection_reason:
-      status === 'rejected' && typeof reason === 'string' ? reason.trim() : null,
-    updated_at: now,
-  };
-
-  const { error } = await auth.admin
-    .from('profiles')
-    .update(updateData)
-    .eq('id', profileId);
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-
-  return NextResponse.json({ success: true });
+  return NextResponse.json({
+    success: true,
+    succeeded: result.succeeded,
+    failed: result.failed,
+  });
 }

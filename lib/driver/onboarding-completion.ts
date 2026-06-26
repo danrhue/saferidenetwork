@@ -1,4 +1,4 @@
-import { isProfilePhotoApproved } from '@/lib/profile-photo';
+import { hasProfilePhotoForOnboarding } from '@/lib/profile-photo';
 
 export type PersonalProfile = Record<string, unknown>;
 
@@ -33,7 +33,7 @@ export function calculateDriverCompletion(
     hasValue(profile, 'dob_year') && hasValue(profile, 'ssn'),
     hasValue(profile, 'emergency_contact_first_name') &&
       hasValue(profile, 'emergency_contact_phone'),
-    isProfilePhotoApproved(profile),
+    hasProfilePhotoForOnboarding(profile),
     !!(
       profile.vehicle_year &&
       profile.vehicle_make &&

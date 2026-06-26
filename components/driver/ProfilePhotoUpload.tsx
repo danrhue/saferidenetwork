@@ -15,6 +15,8 @@ type ProfilePhotoUploadProps = {
   uploading: boolean;
   onUpload: (file: File) => void;
   onDelete: () => void;
+  /** When true, shows onboarding-specific copy for pending review (does not block completion). */
+  onboardingMode?: boolean;
 };
 
 export default function ProfilePhotoUpload({
@@ -24,6 +26,7 @@ export default function ProfilePhotoUpload({
   uploading,
   onUpload,
   onDelete,
+  onboardingMode = false,
 }: ProfilePhotoUploadProps) {
   const hasPhoto = Boolean(photoUrl);
   const normalizedStatus = normalizeProfilePhotoStatus(status);
@@ -58,7 +61,15 @@ export default function ProfilePhotoUpload({
       {normalizedStatus === 'pending' && hasPhoto && (
         <div className="max-w-md mx-auto mb-6 p-4 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-900 text-left">
           <strong>Under review.</strong> Your photo has been submitted and is waiting for admin
-          approval. You can replace it anytime before it is approved.
+          approval.
+          {onboardingMode ? (
+            <p className="mt-2">
+              You can continue onboarding while your photo is reviewed. It will not be visible to
+              riders or organizations until approved.
+            </p>
+          ) : (
+            <p className="mt-2">You can replace it anytime before it is approved.</p>
+          )}
         </div>
       )}
 
