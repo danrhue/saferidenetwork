@@ -467,10 +467,10 @@ export default function TripExecutionScreen() {
         <h2 className="text-2xl font-semibold text-gray-900 mb-2">Access Restricted</h2>
         <p className="text-gray-600 mb-6">{error || 'This trip is not available.'}</p>
         <Link
-          href="/dashboard/my-offers"
+          href="/dashboard/active-trips"
           className="inline-block px-8 py-3 bg-[#1E3A8A] text-white rounded-2xl text-lg font-medium"
         >
-          Back to My Offers
+          Back to Active Trips
         </Link>
       </div>
     );
@@ -496,8 +496,8 @@ export default function TripExecutionScreen() {
       {/* Calm top header */}
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <Link href="/dashboard/my-offers" className="text-sm text-blue-700 hover:underline flex items-center gap-1">
-            ← Back to My Offers
+          <Link href="/dashboard/active-trips" className="text-sm text-blue-700 hover:underline flex items-center gap-1">
+            ← Back to Active Trips
           </Link>
           <h1 className="text-3xl font-bold text-blue-950 mt-1 tracking-tight">Trip Execution</h1>
           <p className="text-blue-800 text-sm mt-0.5">Simple. Safe. Mobile-optimized for drivers.</p>
@@ -706,10 +706,10 @@ export default function TripExecutionScreen() {
       {/* Footer actions */}
       <div className="mt-8 text-center">
         <Link
-          href="/dashboard/my-offers"
+          href="/dashboard/active-trips"
           className="text-blue-700 hover:text-blue-900 underline text-sm"
         >
-          Return to My Offers
+          Return to Active Trips
         </Link>
       </div>
 

@@ -10,6 +10,8 @@ export type PortalNavItem = {
   label: string;
   badge?: string;
   icon?: ReactNode;
+  /** Short helper text shown under the label (expanded sidebar only). */
+  description?: string;
   /** Additional path prefixes that should mark this link active */
   matchPaths?: string[];
 };
@@ -52,6 +54,8 @@ function renderNavLink(
     ) ??
       false);
 
+  const showDescription = !collapsed && item.description;
+
   return (
     <Link
       key={item.href}
@@ -59,8 +63,12 @@ function renderNavLink(
       onClick={onClose}
       title={collapsed ? item.label : undefined}
       aria-label={collapsed ? item.label : undefined}
-      className={`group flex min-h-[44px] items-center gap-3 rounded-2xl text-sm font-medium transition-all ${
-        collapsed ? 'justify-center px-3 py-3' : theme === 'dark' ? 'px-5 py-3.5' : 'px-4 py-3'
+      className={`group flex rounded-2xl text-sm font-medium transition-all ${
+        showDescription
+          ? 'flex-col gap-1.5 px-5 py-3.5'
+          : `min-h-[44px] items-center gap-3 ${
+              collapsed ? 'justify-center px-3 py-3' : theme === 'dark' ? 'px-5 py-3.5' : 'px-4 py-3'
+            }`
       } ${
         isActive
           ? theme === 'dark'
@@ -71,37 +79,54 @@ function renderNavLink(
             : 'text-blue-950 hover:bg-gray-100'
       }`}
     >
-      {item.icon && (
-        <span
-          className={`shrink-0 transition-colors ${
+      <div className={`flex items-center gap-3 ${showDescription ? 'w-full' : ''}`}>
+        {item.icon && (
+          <span
+            className={`shrink-0 transition-colors ${
+              isActive
+                ? theme === 'dark'
+                  ? 'text-[#1E3A8A]'
+                  : 'text-white'
+                : theme === 'dark'
+                  ? 'text-gray-400 group-hover:text-white'
+                  : 'text-gray-500 group-hover:text-blue-950'
+            }`}
+            aria-hidden
+          >
+            {item.icon}
+          </span>
+        )}
+        {!collapsed && <span className="min-w-0 flex-1">{item.label}</span>}
+        {!collapsed && item.badge && (
+          <span
+            className={`ml-auto shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors ${
+              isActive
+                ? theme === 'dark'
+                  ? 'bg-[#1E3A8A]/10 text-[#1E3A8A]'
+                  : 'bg-white/20 text-white'
+                : theme === 'dark'
+                  ? 'bg-white/10 text-gray-300'
+                  : 'bg-gray-100 text-gray-600 group-hover:bg-white/20 group-hover:text-white'
+            }`}
+          >
+            {item.badge}
+          </span>
+        )}
+      </div>
+      {showDescription && (
+        <p
+          className={`pl-8 text-xs leading-snug ${
             isActive
               ? theme === 'dark'
-                ? 'text-[#1E3A8A]'
-                : 'text-white'
+                ? 'text-blue-900/80'
+                : 'text-white/85'
               : theme === 'dark'
-                ? 'text-gray-400 group-hover:text-white'
-                : 'text-gray-500 group-hover:text-blue-950'
-          }`}
-          aria-hidden
-        >
-          {item.icon}
-        </span>
-      )}
-      {!collapsed && <span className="min-w-0 flex-1">{item.label}</span>}
-      {!collapsed && item.badge && (
-        <span
-          className={`ml-auto shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors ${
-            isActive
-              ? theme === 'dark'
-                ? 'bg-[#1E3A8A]/10 text-[#1E3A8A]'
-                : 'bg-white/20 text-white'
-              : theme === 'dark'
-                ? 'bg-white/10 text-gray-300'
-                : 'bg-gray-100 text-gray-600 group-hover:bg-white/20 group-hover:text-white'
+                ? 'text-gray-500 group-hover:text-gray-400'
+                : 'text-gray-500 group-hover:text-blue-900/70'
           }`}
         >
-          {item.badge}
-        </span>
+          {item.description}
+        </p>
       )}
     </Link>
   );

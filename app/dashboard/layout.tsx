@@ -17,6 +17,7 @@ import {
   LayoutDashboard,
   LogOut,
   MapPin,
+  Navigation,
   Star,
   User,
 } from 'lucide-react';
@@ -91,12 +92,21 @@ function DashboardLayoutShell({
             href: '/dashboard/trips',
             label: 'Browse Trips',
             icon: <MapPin size={20} strokeWidth={2} />,
-            matchPaths: ['/dashboard/trip'],
           },
           {
             href: '/dashboard/my-offers',
             label: 'My Offers',
             icon: <ClipboardList size={20} strokeWidth={2} />,
+            description:
+              'Trips you have offered on. You will be notified if an organization assigns one to you.',
+          },
+          {
+            href: '/dashboard/active-trips',
+            label: 'Active Trips',
+            icon: <Navigation size={20} strokeWidth={2} />,
+            matchPaths: ['/dashboard/trip'],
+            description:
+              'Trips you have been assigned to. Open the trip to start navigation and manage your route.',
           },
         ],
       },
