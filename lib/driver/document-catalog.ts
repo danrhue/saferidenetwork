@@ -133,6 +133,10 @@ export const DRIVER_DOCUMENT_CATALOG: Record<string, RequiredDocument> = {
     validityYears: 3,
     uploadable: true,
     requiresExpiration: true,
+    description:
+      'Complete an approved vehicle accident prevention (defensive driving) course and upload your certificate. Renewal is typically required every 3 years.',
+    specialNote:
+      'Kansas drivers: must use a KSDE-approved course — see full K.A.R. 91-38-6 requirements on this card when Kansas is an operating state.',
   },
   tb_test: {
     type: 'tb_test',

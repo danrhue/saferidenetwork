@@ -84,16 +84,36 @@ function renderLineWithLinks(line: string, key: string) {
   );
 }
 
+function isBulletLine(line: string): boolean {
+  const trimmed = line.trim();
+  return /^[•◾\-\*]\s/.test(trimmed);
+}
+
+function formatBulletLine(line: string): string {
+  return line.trim().replace(/^[•◾\-\*]\s*/, '');
+}
+
 function DocumentDescription({ text }: { text: string }) {
   return (
     <div className="mt-2 space-y-1.5 text-sm leading-relaxed text-gray-600">
-      {text.split('\n').map((line, index) =>
-        line.trim() === '' ? (
-          <div key={index} className="h-1" aria-hidden />
-        ) : (
-          renderLineWithLinks(line, String(index))
-        )
-      )}
+      {text.split('\n').map((line, index) => {
+        if (line.trim() === '') {
+          return <div key={index} className="h-1" aria-hidden />;
+        }
+
+        if (isBulletLine(line)) {
+          return (
+            <p key={index} className="flex gap-2 pl-1">
+              <span className="shrink-0 text-blue-900" aria-hidden>
+                •
+              </span>
+              <span className="min-w-0">{formatBulletLine(line)}</span>
+            </p>
+          );
+        }
+
+        return renderLineWithLinks(line, String(index));
+      })}
     </div>
   );
 }

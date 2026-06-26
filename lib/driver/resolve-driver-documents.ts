@@ -78,8 +78,10 @@ function mergeStateDescriptions(
 
   for (const row of stateRows) {
     if (!states.has(row.state_code.toUpperCase()) || !row.description?.trim()) continue;
-    if (!descriptionByType.has(row.document_type)) {
-      descriptionByType.set(row.document_type, row.description.trim());
+    const next = row.description.trim();
+    const existing = descriptionByType.get(row.document_type);
+    if (!existing || next.length > existing.length) {
+      descriptionByType.set(row.document_type, next);
     }
   }
 
