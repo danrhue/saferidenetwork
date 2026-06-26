@@ -174,6 +174,17 @@ export const DRIVER_DOCUMENT_CATALOG: Record<string, RequiredDocument> = {
     uploadable: true,
     requiresExpiration: true,
   },
+  missouri_vehicle_inspection: {
+    type: 'missouri_vehicle_inspection',
+    label: 'Missouri Certified Mechanic Vehicle Inspection Form',
+    category: 'vehicle',
+    cost: 'Driver is responsible for the cost',
+    description:
+      'Missouri Vehicle Inspection (Certified Mechanic)\n\nRequired for Missouri\n\nYou must have a certified mechanic complete the official State of Missouri Certified Mechanic Vehicle Inspection Form. This inspection is required for all vehicles used for student transportation in Missouri.\n\nHow to complete:\n• Download the Missouri Certified Mechanic Vehicle Inspection Form\n• Take your vehicle to a certified mechanic\n• Have them complete and sign all sections of the form\n• Upload the completed and signed form\n\nNote: This is a specific mechanic inspection required for student transport vehicles in Missouri. It is different from a standard state safety inspection.',
+    uploadable: true,
+    requiresExpiration: true,
+    specialNote: 'Missouri drivers only — separate from the general vehicle inspection requirement.',
+  },
   english_language_proficiency: {
     type: 'english_language_proficiency',
     label: 'English Language Proficiency (Hallo.ai)',
