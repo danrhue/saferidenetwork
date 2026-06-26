@@ -51,6 +51,14 @@ function resolveStatusLabel(existing?: DriverDocumentRecord): string {
   }
 }
 
+function costValueClass(doc: RequiredDocument): string {
+  if (doc.costHighlight === 'green') return 'font-medium text-emerald-700';
+  if (doc.costHighlight === 'orange') return 'font-medium text-orange-700';
+  return doc.cost.includes('Driver')
+    ? 'font-medium text-orange-700'
+    : 'font-medium text-emerald-700';
+}
+
 function statusBadgeClass(label: string): string {
   if (label === 'Approved') return 'bg-emerald-50 text-emerald-800 border-emerald-200';
   if (label === 'Rejected' || label === 'Expired') {
@@ -127,13 +135,7 @@ export default function DriverDocumentCard({
         <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500">
           <p>
             <span className="font-medium text-gray-600">Cost:</span>{' '}
-            <span
-              className={
-                doc.cost.includes('Driver') ? 'font-medium text-orange-700' : 'font-medium text-emerald-700'
-              }
-            >
-              {doc.cost}
-            </span>
+            <span className={costValueClass(doc)}>{doc.cost}</span>
           </p>
           {validityText && (
             <p>

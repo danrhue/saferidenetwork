@@ -82,6 +82,8 @@ export type RequiredDocument = {
   uploadable: boolean;
   actionLabel?: string;
   requiresExpiration?: boolean;
+  /** Override header cost color (default: orange when cost mentions "Driver", else green). */
+  costHighlight?: 'green' | 'orange';
   /** Optional blank form drivers can download before uploading a completed copy. */
   formDownload?: DocumentFormDownload;
 };
@@ -297,8 +299,9 @@ export const DRIVER_DOCUMENT_CATALOG: Record<string, RequiredDocument> = {
     label: 'First Aid & CPR/AED Certification',
     category: 'training',
     cost: 'Driver is responsible for the cost',
+    costHighlight: 'green',
     description:
-      'First Aid & CPR/AED Certification\n\nRequired\n\nYou must hold a current First Aid and CPR/AED certification from an approved provider. This training ensures you can respond to medical emergencies while transporting passengers.\n\nAccepted Providers & Courses:\n• American Red Cross — Adult First Aid/CPR/AED (Online or Blended) — https://www.redcross.org/take-a-class/classes/adult-first-aid%2Fcpr%2Faed-online/a6RVx000000Xi3t.html\n• American Heart Association — Heartsaver First Aid CPR AED (Online + Skills Session) — https://shopcpr.heart.org/heartsaver-first-aid-cpr-aed-online\n• National Safety Council (NSC) — First Aid, CPR & AED — Available through NSC authorized providers\n• HSI / American Safety & Health Institute (ASHI) — First Aid + CPR/AED — Available through HSI online and approved training centers\n\nImportant Notes:\n• The course must include both First Aid and CPR/AED.\n• Some courses are fully online, while others require a hands-on skills session.\n• Certification is typically valid for 2 years.\n\nUpload your current certificate once completed.',
+      'Hold a current First Aid and CPR/AED certification from an approved provider.\n\nRequirements:\n• Must include both First Aid and CPR/AED\n• Renew every 2 years (some courses require a hands-on skills session)\n\nApproved providers:\n• American Red Cross — https://www.redcross.org/take-a-class/classes/adult-first-aid%2Fcpr%2Faed-online/a6RVx000000Xi3t.html (~$35–$45)\n• American Heart Association — https://shopcpr.heart.org/heartsaver-first-aid-cpr-aed-online (~$40–$55)\n• National Safety Council (NSC) — https://www.nsc.org/safety-training/first-aid (~$30–$60)\n• HSI / ASHI — https://www.hsi.com/ (~$25–$50)\n\nUpload your certificate when complete.',
     validityYears: 2,
     uploadable: true,
     requiresExpiration: true,
