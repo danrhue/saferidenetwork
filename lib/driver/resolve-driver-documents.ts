@@ -2,16 +2,21 @@ import {
   DEFAULT_DOCUMENT_TYPES,
   DRIVER_DOCUMENT_CATALOG,
   getCatalogDocument,
+  type RequiredDocument,
 } from '@/lib/driver/document-catalog';
-import type { RequiredDocument } from '@/lib/driver/required-documents';
+import {
+  getStateDocumentOverride,
+  type StateDocumentOverride,
+} from '@/lib/driver/document-state-overrides';
 import { normalizeStateCodes } from '@/lib/driver/us-states';
+
+export type { RequiredDocument };
 
 export type StateRequirementRow = {
   state_code: string;
   document_type: string;
   sort_order: number;
   is_required: boolean;
-  description?: string | null;
 };
 
 /**
@@ -52,7 +57,7 @@ export function resolveRequiredDocuments(documentTypes: string[]): RequiredDocum
     const doc = getCatalogDocument(type);
     if (!doc) continue;
     seen.add(type);
-    resolved.push(doc);
+    resolved.push({ ...doc });
   }
 
   return resolved;
@@ -68,27 +73,49 @@ export function getAllCatalogDocuments(): RequiredDocument[] {
   return resolveRequiredDocuments(Object.keys(DRIVER_DOCUMENT_CATALOG));
 }
 
-function mergeStateDescriptions(
-  documents: RequiredDocument[],
-  stateRows: StateRequirementRow[],
+function pickStateOverrideForDocument(
+  documentType: string,
   drivingStates: string[]
-): RequiredDocument[] {
-  const states = new Set(normalizeStateCodes(drivingStates));
-  const descriptionByType = new Map<string, string>();
+): StateDocumentOverride | undefined {
+  let best: { override: StateDocumentOverride; descriptionLength: number } | undefined;
 
-  for (const row of stateRows) {
-    if (!states.has(row.state_code.toUpperCase()) || !row.description?.trim()) continue;
-    const next = row.description.trim();
-    const existing = descriptionByType.get(row.document_type);
-    if (!existing || next.length > existing.length) {
-      descriptionByType.set(row.document_type, next);
+  for (const state of drivingStates) {
+    const override = getStateDocumentOverride(state, documentType);
+    if (!override) continue;
+
+    const descriptionLength = override.description?.trim().length ?? 0;
+    if (
+      !best ||
+      descriptionLength > best.descriptionLength ||
+      (descriptionLength === best.descriptionLength && descriptionLength > 0)
+    ) {
+      best = { override, descriptionLength };
     }
   }
 
-  return documents.map((doc) => ({
-    ...doc,
-    description: descriptionByType.get(doc.type) ?? doc.description,
-  }));
+  return best?.override;
+}
+
+/** Apply code-based state overrides on top of catalog metadata. */
+export function applyStateCatalogOverrides(
+  documents: RequiredDocument[],
+  drivingStates: string[]
+): RequiredDocument[] {
+  const states = normalizeStateCodes(drivingStates);
+  if (states.length === 0) return documents;
+
+  return documents.map((doc) => {
+    const override = pickStateOverrideForDocument(doc.type, states);
+    if (!override) return doc;
+
+    const next: RequiredDocument = { ...doc, ...override };
+
+    if (override.description && override.specialNote === undefined) {
+      delete next.specialNote;
+    }
+
+    return next;
+  });
 }
 
 export function resolveRequiredDocumentsForStates(
@@ -98,5 +125,5 @@ export function resolveRequiredDocumentsForStates(
   const types = unionDocumentTypesFromStateRows(stateRows, drivingStates);
   if (types.length === 0) return [];
   const documents = resolveRequiredDocuments(types);
-  return mergeStateDescriptions(documents, stateRows, drivingStates);
+  return applyStateCatalogOverrides(documents, drivingStates);
 }

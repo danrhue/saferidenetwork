@@ -75,7 +75,7 @@ export async function getDriverProfileCompletionPercent(
     const admin = getSupabaseAdmin();
     const { data: rows } = await admin
       .from('state_document_requirements')
-      .select('state_code, document_type, sort_order, is_required, description')
+      .select('state_code, document_type, sort_order, is_required')
       .in('state_code', drivingStates)
       .eq('is_required', true)
       .order('sort_order', { ascending: true });

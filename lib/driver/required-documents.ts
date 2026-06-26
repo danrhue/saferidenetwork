@@ -1,12 +1,24 @@
 import {
   DEFAULT_DOCUMENT_TYPES,
+  DOCUMENT_CATEGORY_META,
+  DOCUMENT_CATEGORY_ORDER,
   DRIVER_DOCUMENT_CATALOG,
   getCatalogDocument,
+  type DocumentCategoryId,
   type RequiredDocument,
 } from '@/lib/driver/document-catalog';
-import { getDefaultRequiredDocuments, resolveRequiredDocuments } from '@/lib/driver/resolve-driver-documents';
+import {
+  applyStateCatalogOverrides,
+  getDefaultRequiredDocuments,
+  resolveRequiredDocuments,
+} from '@/lib/driver/resolve-driver-documents';
 
-export type { RequiredDocument };
+export type { DocumentCategoryId, RequiredDocument };
+export {
+  applyStateCatalogOverrides,
+  DOCUMENT_CATEGORY_META,
+  DOCUMENT_CATEGORY_ORDER,
+};
 
 export function formatDocumentValidity(doc: RequiredDocument): string | null {
   if (doc.validityMonths) {

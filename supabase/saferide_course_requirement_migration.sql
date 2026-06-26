@@ -6,8 +6,10 @@
 ALTER TABLE public.state_document_requirements
   ADD COLUMN IF NOT EXISTS description text;
 
+-- Deprecated: descriptions are maintained in lib/driver/document-catalog.ts
+-- and lib/driver/document-state-overrides.ts (not in the database).
 COMMENT ON COLUMN public.state_document_requirements.description IS
-  'Optional per-state instructions shown in the driver My Documents UI.';
+  'DEPRECATED — copy is maintained in lib/driver/document-catalog.ts and document-state-overrides.ts.';
 
 INSERT INTO public.state_document_requirements (
   state_code,

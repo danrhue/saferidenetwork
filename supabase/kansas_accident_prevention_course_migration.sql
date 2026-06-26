@@ -1,6 +1,9 @@
 -- =============================================================================
 -- Kansas — Vehicle Accident Prevention Course (K.A.R. 91-38-6)
 -- Run in Supabase SQL editor
+--
+-- NOTE: Description copy now lives in lib/driver/document-state-overrides.ts.
+-- This migration only ensures KS requires accident_prevention_course.
 -- =============================================================================
 
 ALTER TABLE public.state_document_requirements

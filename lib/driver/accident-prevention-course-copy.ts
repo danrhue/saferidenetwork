@@ -21,7 +21,7 @@ Source: Kansas Activity/School Bus Transportation Mandates, School Bus Safety Un
 
 Upload your certificate of completion when finished.`;
 
-/** Default copy when no state-specific description is stored in the database. */
+/** Default catalog copy when no state override applies (see document-state-overrides.ts). */
 export const DEFAULT_ACCIDENT_PREVENTION_COURSE_DESCRIPTION = `Complete an approved vehicle accident prevention (defensive driving) course and upload your certificate.
 
 Requirements:
