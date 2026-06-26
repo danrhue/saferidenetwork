@@ -41,11 +41,6 @@ export function calculateDriverCompletion(
       profile.vehicle_model &&
       profile.passenger_capacity
     ),
-    !!(
-      profile.stripe_account_id &&
-      profile.stripe_onboarding_complete &&
-      profile.stripe_payouts_enabled
-    ),
     options.documentsRequired > 0 &&
       options.documentsUploaded >= options.documentsRequired,
   ];

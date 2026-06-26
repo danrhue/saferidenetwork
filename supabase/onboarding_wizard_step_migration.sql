@@ -10,10 +10,10 @@ BEGIN
     ADD CONSTRAINT profiles_onboarding_wizard_step_check
     CHECK (
       onboarding_wizard_step IS NULL
-      OR (onboarding_wizard_step >= 1 AND onboarding_wizard_step <= 10)
+      OR (onboarding_wizard_step >= 1 AND onboarding_wizard_step <= 9)
     );
 EXCEPTION
   WHEN duplicate_object THEN NULL;
 END $$;
 
-COMMENT ON COLUMN public.profiles.onboarding_wizard_step IS 'Last step the driver was on in the 10-step profile wizard (1-10); used to resume progress';
+COMMENT ON COLUMN public.profiles.onboarding_wizard_step IS 'Last step the driver was on in the 9-step profile wizard (1-9); used to resume progress';

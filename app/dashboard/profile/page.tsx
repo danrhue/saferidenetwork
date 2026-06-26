@@ -39,9 +39,6 @@ export default function DriverProfile() {
   const [uploadingProfile, setUploadingProfile] = useState(false);
   const [uploadingVehicle, setUploadingVehicle] = useState(false);
 
-  // Stripe Connect state
-  const [stripeConnecting, setStripeConnecting] = useState(false);
-  const [stripeMessage, setStripeMessage] = useState<string | null>(null);
   const searchParams = useSearchParams();
   const router = useRouter();
   const { refresh: refreshProfileCompletion } = useProfileCompletion();
@@ -66,42 +63,12 @@ export default function DriverProfile() {
   const documentsRequired = uploadableDocuments.length;
 
   useEffect(() => {
-    if (searchParams.get('stripe') === 'complete') {
-      setStripeMessage('Stripe onboarding submitted. Status will update shortly.');
-    } else if (searchParams.get('stripe') === 'refresh') {
-      setStripeMessage('Please complete your Stripe setup to receive trip payouts.');
+    const stripeParam = searchParams.get('stripe');
+    if (stripeParam === 'complete' || stripeParam === 'refresh') {
+      router.replace(`/dashboard/payments?stripe=${stripeParam}`, { scroll: false });
+      return;
     }
-  }, [searchParams]);
-
-  const handleConnectStripe = async () => {
-    setStripeConnecting(true);
-    setStripeMessage(null);
-    try {
-      const createRes = await authFetch('/api/stripe/connect/create-account', { method: 'POST' });
-      const createData = await createRes.json();
-      if (!createRes.ok) throw new Error(createData.error || 'Failed to create Stripe account');
-
-      const linkRes = await authFetch('/api/stripe/connect/account-link', { method: 'POST' });
-      const linkData = await linkRes.json();
-      if (!linkRes.ok) throw new Error(linkData.error || 'Failed to generate onboarding link');
-
-      if (linkData.url) {
-        window.location.href = linkData.url;
-        return;
-      }
-      throw new Error('No onboarding URL returned');
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'Stripe connection failed';
-      setStripeMessage(msg);
-    } finally {
-      setStripeConnecting(false);
-    }
-  };
-
-  const isStripeConnected =
-    profile?.stripe_account_id &&
-    profile?.stripe_onboarding_complete &&
-    profile?.stripe_payouts_enabled;
+  }, [router, searchParams]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -530,11 +497,6 @@ export default function DriverProfile() {
           onSaveVehicle={saveVehicleProfile}
           documentsUploaded={documentsUploaded}
           documentsRequired={documentsRequired}
-          isStripeConnected={!!isStripeConnected}
-          hasStripeAccount={!!profile?.stripe_account_id}
-          stripeConnecting={stripeConnecting}
-          stripeMessage={stripeMessage}
-          onConnectStripe={handleConnectStripe}
         />
       )}
 

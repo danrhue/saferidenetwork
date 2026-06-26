@@ -249,7 +249,7 @@ export async function createDriverExpressAccount(
  */
 export async function createDriverAccountLink(
   accountId: string,
-  returnPath = '/dashboard/profile'
+  returnPath = '/dashboard/payments'
 ): Promise<Stripe.AccountLink> {
   const stripe = getStripe();
 

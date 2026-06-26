@@ -1,6 +1,6 @@
-/** Driver profile onboarding wizard — 10 steps. */
+/** Driver profile onboarding wizard — 9 steps (Stripe/payments is separate). */
 
-export const WIZARD_STEP_COUNT = 10;
+export const WIZARD_STEP_COUNT = 9;
 
 /** Default profile wizard URL — smart resume selects the correct step on load. */
 export const PROFILE_WIZARD_PATH = '/dashboard/profile';
@@ -14,8 +14,7 @@ export const WIZARD_STEPS = [
   { id: 6, title: 'Emergency Contact' },
   { id: 7, title: 'Profile Photo' },
   { id: 8, title: 'Vehicle & Seating' },
-  { id: 9, title: 'Payment Setup' },
-  { id: 10, title: 'Documents' },
+  { id: 9, title: 'Documents' },
 ] as const;
 
 export type WizardStepId = (typeof WIZARD_STEPS)[number]['id'];
@@ -72,7 +71,14 @@ export function stepRequiresDataSave(step: number): boolean {
 
 /** Steps that only persist the wizard step index (no field payload). */
 export function stepPersistsProgressOnly(step: number): boolean {
-  return step === 9 || step === 10;
+  return step === 9;
+}
+
+/** Map legacy 10-step wizard indices to the current 9-step flow. */
+export function normalizeStoredWizardStep(step: number | null | undefined): number {
+  const raw = Math.trunc(step ?? 1) || 1;
+  if (raw >= 10) return 9;
+  return clampWizardStep(raw);
 }
 
 export {

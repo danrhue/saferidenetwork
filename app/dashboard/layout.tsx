@@ -10,6 +10,7 @@ import { enforceActiveAccount } from '@/lib/account-status';
 import {
   Bell,
   ClipboardList,
+  CreditCard,
   FileText,
   LayoutDashboard,
   LogOut,
@@ -100,6 +101,11 @@ function DashboardLayoutShell({
       {
         title: 'ACCOUNT',
         items: [
+          {
+            href: '/dashboard/payments',
+            label: 'Payments',
+            icon: <CreditCard size={20} strokeWidth={2} />,
+          },
           {
             href: '/dashboard/ratings',
             label: 'My Ratings',

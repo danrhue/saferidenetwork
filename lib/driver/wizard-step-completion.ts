@@ -5,7 +5,11 @@ import {
   normalizeSsn,
   validateDateOfBirth,
 } from '@/lib/driver/wizard-step-validation';
-import { WIZARD_STEP_COUNT, clampWizardStep } from '@/lib/driver/wizard-steps';
+import {
+  WIZARD_STEP_COUNT,
+  clampWizardStep,
+  normalizeStoredWizardStep,
+} from '@/lib/driver/wizard-steps';
 import { normalizeStateCodes } from '@/lib/driver/us-states';
 
 export type WizardCompletionContext = {
@@ -119,12 +123,6 @@ export function isWizardStepComplete(
         profile.passenger_capacity
       );
     case 9:
-      return !!(
-        profile.stripe_account_id &&
-        profile.stripe_onboarding_complete &&
-        profile.stripe_payouts_enabled
-      );
-    case 10:
       return (
         ctx.documentsRequired > 0 && ctx.documentsUploaded >= ctx.documentsRequired
       );
@@ -133,7 +131,7 @@ export function isWizardStepComplete(
   }
 }
 
-/** Per-step completion flags for steps 1–10 (index 0 = step 1). */
+/** Per-step completion flags for steps 1–9 (index 0 = step 1). */
 export function getWizardStepCompletionMap(
   profile: WizardProfileInput,
   ctx: WizardCompletionContext
@@ -203,7 +201,7 @@ export function resolveWizardResumeStep(
     }
   }
 
-  const savedStep = clampWizardStep(dbStep ?? 1);
+  const savedStep = normalizeStoredWizardStep(dbStep);
 
   if (!areWizardStepsCompleteThrough(savedStep - 1, profile, ctx)) {
     return getFirstIncompleteWizardStep(profile, ctx);

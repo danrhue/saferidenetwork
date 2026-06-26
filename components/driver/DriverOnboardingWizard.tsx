@@ -104,11 +104,6 @@ export type DriverOnboardingWizardProps = {
   onSaveVehicle: () => void;
   documentsUploaded: number;
   documentsRequired: number;
-  isStripeConnected: boolean;
-  hasStripeAccount: boolean;
-  stripeConnecting: boolean;
-  stripeMessage: string | null;
-  onConnectStripe: () => void;
   initialStep?: number;
   onDrivingStatesSaved?: (result: OperatingStatesSaveResult) => void | Promise<void>;
 };
@@ -145,11 +140,6 @@ export default function DriverOnboardingWizard(props: DriverOnboardingWizardProp
     onSaveVehicle,
     documentsUploaded,
     documentsRequired,
-    isStripeConnected,
-    hasStripeAccount,
-    stripeConnecting,
-    stripeMessage,
-    onConnectStripe,
     initialStep = 1,
     onDrivingStatesSaved,
   } = props;
@@ -619,15 +609,6 @@ export default function DriverOnboardingWizard(props: DriverOnboardingWizardProp
           />
         )}
         {currentStep === 9 && (
-          <PaymentStep
-            isStripeConnected={isStripeConnected}
-            hasStripeAccount={hasStripeAccount}
-            stripeConnecting={stripeConnecting}
-            stripeMessage={stripeMessage}
-            onConnectStripe={onConnectStripe}
-          />
-        )}
-        {currentStep === 10 && (
           <DocumentsStep
             documentsUploaded={documentsUploaded}
             documentsRequired={documentsRequired}
@@ -1281,63 +1262,6 @@ function VehicleStep({
           </label>
         )}
       </div>
-    </div>
-  );
-}
-
-function PaymentStep({
-  isStripeConnected,
-  hasStripeAccount,
-  stripeConnecting,
-  stripeMessage,
-  onConnectStripe,
-}: {
-  isStripeConnected: boolean;
-  hasStripeAccount: boolean;
-  stripeConnecting: boolean;
-  stripeMessage: string | null;
-  onConnectStripe: () => void;
-}) {
-  return (
-    <div className="text-center py-8">
-      <StepGuidance
-        title="Payment Setup (Stripe Connect)"
-        description="Connect your Stripe Express account so you can get paid automatically when an organization marks a trip as complete."
-        centered
-      />
-
-      {isStripeConnected ? (
-        <div className="max-w-md mx-auto flex flex-col items-center gap-3 p-6 bg-green-50 border border-green-200 rounded-2xl">
-          <span className="text-green-700 font-semibold text-lg">✓ Stripe Connected</span>
-          <span className="text-sm text-green-600">Ready to receive payouts</span>
-        </div>
-      ) : hasStripeAccount ? (
-        <div className="max-w-md mx-auto space-y-4">
-          <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-sm">
-            Stripe account created — complete onboarding to enable payouts.
-          </div>
-          <button
-            type="button"
-            onClick={onConnectStripe}
-            disabled={stripeConnecting}
-            className="bg-[#1E3A8A] text-white px-10 py-4 rounded-2xl hover:bg-[#162d6b] disabled:opacity-60"
-          >
-            {stripeConnecting ? 'Loading...' : 'Complete Stripe Setup'}
-          </button>
-        </div>
-      ) : (
-        <button
-          type="button"
-          onClick={onConnectStripe}
-          disabled={stripeConnecting}
-          className="bg-[#1E3A8A] text-white px-10 py-4 rounded-2xl hover:bg-[#162d6b] disabled:opacity-60"
-        >
-          {stripeConnecting ? 'Connecting...' : 'Connect with Stripe'}
-        </button>
-      )}
-
-      <p className="text-xs text-gray-500 mt-6">Secure • Fast payouts • No fees from Safe Ride Network</p>
-      {stripeMessage && <p className="text-sm text-blue-800 mt-4">{stripeMessage}</p>}
     </div>
   );
 }

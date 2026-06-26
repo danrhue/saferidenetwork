@@ -281,10 +281,10 @@ function buildProfileTasks(profile: PersonalProfile): PendingTask[] {
   ) {
     addTask(
       'profile-payouts',
-      'Set up payout account',
-      'Connect Stripe to receive trip payouts.',
-      PROFILE_WIZARD_HREF,
-      'high'
+      'Set up payout account (optional)',
+      'Connect Stripe on the Payments page to receive trip payouts.',
+      '/dashboard/payments',
+      'low'
     );
   }
 

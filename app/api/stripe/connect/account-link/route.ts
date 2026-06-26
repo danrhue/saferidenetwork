@@ -41,7 +41,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const accountLink = await createDriverAccountLink(profile.stripe_account_id);
+    let returnPath = '/dashboard/payments';
+    try {
+      const body = await request.json();
+      if (
+        typeof body?.returnPath === 'string' &&
+        body.returnPath.startsWith('/dashboard/') &&
+        !body.returnPath.includes('..')
+      ) {
+        returnPath = body.returnPath;
+      }
+    } catch {
+      // Empty body — use default return path.
+    }
+
+    const accountLink = await createDriverAccountLink(profile.stripe_account_id, returnPath);
 
     return NextResponse.json({ url: accountLink.url });
   } catch (err: unknown) {
