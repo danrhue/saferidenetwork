@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { getProfilePhotoPublicUrl } from '@/lib/storage/profile-photos';
+import { resolveProfilePhotoUrl } from '@/lib/storage/profile-photos';
 
 export type ProfilePhotoReviewAction = 'approved' | 'rejected';
 
@@ -192,9 +192,40 @@ export async function listDriverProfilePhotos(
     rows.map((r) => r.id)
   );
 
-  return rows.map((row) => ({
-    ...row,
-    photo_url: getProfilePhotoPublicUrl(row.profile_photo_url),
-    last_audit: auditByProfile[row.id] ?? null,
+  return Promise.all(
+    rows.map(async (row) => ({
+      ...row,
+      photo_url: await resolveProfilePhotoUrl(admin, row.profile_photo_url),
+      last_audit: auditByProfile[row.id] ?? null,
+    }))
+  );
+}
+
+export async function fetchProfilePhotoAuditHistory(
+  admin: SupabaseClient,
+  profileId: string
+): Promise<ProfilePhotoAuditEntry[]> {
+  const { data: logs, error } = await admin
+    .from('profile_photo_audit_log')
+    .select('id, profile_id, admin_id, action, rejection_reason, created_at')
+    .eq('profile_id', profileId)
+    .order('created_at', { ascending: false });
+
+  if (error || !logs?.length) return [];
+
+  const adminIds = [...new Set(logs.map((l) => l.admin_id))];
+  const { data: admins } = await admin
+    .from('profiles')
+    .select('id, full_name')
+    .in('id', adminIds);
+
+  const adminNameById = Object.fromEntries(
+    (admins ?? []).map((a) => [a.id, a.full_name as string | null])
+  );
+
+  return logs.map((log) => ({
+    ...log,
+    action: log.action as ProfilePhotoReviewAction,
+    admin_name: adminNameById[log.admin_id] ?? null,
   }));
 }

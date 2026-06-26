@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireAdminUser } from '@/lib/admin-auth';
 import { enrichDriverProfiles } from '@/lib/driver-profile';
+import { resolveProfilePhotoUrl } from '@/lib/storage/profile-photos';
 
 export const dynamic = 'force-dynamic';
 
@@ -48,19 +49,28 @@ export async function GET(request: Request) {
     pendingByDriver[doc.driver_id] = (pendingByDriver[doc.driver_id] ?? 0) + 1;
   });
 
-  const driversWithPending = drivers
-    .map((driver) => ({
-      ...driver,
-      pendingDocuments: pendingByDriver[driver.id] ?? 0,
-    }))
-    .sort((a, b) => {
-      if (b.pendingDocuments !== a.pendingDocuments) {
-        return b.pendingDocuments - a.pendingDocuments;
-      }
-      return (
-        new Date(b.created_at ?? 0).getTime() - new Date(a.created_at ?? 0).getTime()
-      );
-    });
+  const driversWithPending = await Promise.all(
+    drivers
+      .map((driver) => ({
+        ...driver,
+        pendingDocuments: pendingByDriver[driver.id] ?? 0,
+      }))
+      .sort((a, b) => {
+        if (b.pendingDocuments !== a.pendingDocuments) {
+          return b.pendingDocuments - a.pendingDocuments;
+        }
+        return (
+          new Date(b.created_at ?? 0).getTime() - new Date(a.created_at ?? 0).getTime()
+        );
+      })
+      .map(async (driver) => ({
+        ...driver,
+        photo_url: await resolveProfilePhotoUrl(
+          auth.admin,
+          driver.profile_photo_url as string | null | undefined
+        ),
+      }))
+  );
 
   return NextResponse.json(driversWithPending);
 }

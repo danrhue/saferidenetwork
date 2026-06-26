@@ -1,6 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
+import AdminImagePreviewModal from '@/components/admin/AdminImagePreviewModal';
 import {
   profilePhotoStatusBadgeClass,
   profilePhotoStatusLabel,
@@ -49,6 +51,8 @@ export default function ProfilePhotoReviewPage() {
   const [rejectModalOpen, setRejectModalOpen] = useState(false);
   const [rejectTargetIds, setRejectTargetIds] = useState<string[]>([]);
   const [rejectReason, setRejectReason] = useState('');
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewAlt, setPreviewAlt] = useState('Profile photo preview');
 
   const pendingDrivers = useMemo(
     () => drivers.filter((d) => d.profile_photo_status === 'pending'),
@@ -300,7 +304,12 @@ export default function ProfilePhotoReviewPage() {
                     <div className="flex flex-wrap justify-between gap-2 items-start">
                       <div>
                         <h3 className="font-semibold text-lg text-blue-950 truncate">
-                          {driver.full_name || 'Unnamed Driver'}
+                          <Link
+                            href={`/admin/drivers/${driver.id}?tab=photo`}
+                            className="hover:text-[#1E3A8A] hover:underline"
+                          >
+                            {driver.full_name || 'Unnamed Driver'}
+                          </Link>
                         </h3>
                         {driver.email && (
                           <p className="text-sm text-blue-700 truncate">{driver.email}</p>
@@ -325,11 +334,20 @@ export default function ProfilePhotoReviewPage() {
 
                 <div className="flex-1 flex items-center justify-center my-3">
                   {driver.photo_url ? (
-                    <img
-                      src={driver.photo_url}
-                      alt={`Profile photo for ${driver.full_name || 'driver'}`}
-                      className="w-36 h-36 rounded-full object-cover border-4 border-blue-100 shadow-md"
-                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPreviewUrl(driver.photo_url);
+                        setPreviewAlt(`Profile photo for ${driver.full_name || 'driver'}`);
+                      }}
+                      className="rounded-full focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]/40"
+                    >
+                      <img
+                        src={driver.photo_url}
+                        alt={`Profile photo for ${driver.full_name || 'driver'}`}
+                        className="h-36 w-36 rounded-full border-4 border-blue-100 object-cover shadow-md"
+                      />
+                    </button>
                   ) : (
                     <div className="w-36 h-36 rounded-full bg-gray-100 flex items-center justify-center text-4xl text-gray-300">
                       👤
@@ -382,6 +400,14 @@ export default function ProfilePhotoReviewPage() {
             );
           })}
         </div>
+      )}
+
+      {previewUrl && (
+        <AdminImagePreviewModal
+          imageUrl={previewUrl}
+          alt={previewAlt}
+          onClose={() => setPreviewUrl(null)}
+        />
       )}
 
       {rejectModalOpen && (

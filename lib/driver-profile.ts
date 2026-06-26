@@ -52,6 +52,12 @@ export type DriverProfileRow = {
   deleted_at?: string | null;
   deleted_by?: string | null;
   pendingDocuments?: number;
+  profile_photo_url?: string | null;
+  profile_photo_status?: string | null;
+  profile_photo_rejection_reason?: string | null;
+  profile_photo_last_reviewed_at?: string | null;
+  driving_states?: string[] | null;
+  photo_url?: string | null;
   [key: string]: unknown;
 };
 
