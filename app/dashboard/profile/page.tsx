@@ -14,11 +14,7 @@ import {
   persistOnboardingWizardStep,
   type WizardStepSaveResult,
 } from '@/lib/driver/wizard-step-save';
-import {
-  WIZARD_PERSONAL_SAVE_STEPS,
-  clampWizardStep,
-  stepPersistsProgressOnly,
-} from '@/lib/driver/wizard-steps';
+import { WIZARD_PERSONAL_SAVE_STEPS, clampWizardStep } from '@/lib/driver/wizard-steps';
 import ProfilePhotoRejectionPanel from '@/components/driver/ProfilePhotoRejectionPanel';
 import {
   deleteDriverProfilePhoto,
@@ -380,8 +376,9 @@ export default function DriverProfile() {
         result = await persistPersonalProfile();
       } else if (step === 8) {
         result = await persistVehicleProfile({ silent: true });
-      } else if (!stepPersistsProgressOnly(step)) {
-        return { ok: true };
+      } else if (step === 2) {
+        // Operating states are persisted by the wizard before this runs.
+        result = { ok: true };
       }
 
       if (!result.ok) return result;
@@ -461,10 +458,6 @@ export default function DriverProfile() {
               driving_states: result.drivingStates,
             }));
             await refreshRequiredDocuments();
-            if (user) {
-              await persistOnboardingWizardStep(supabase, user.id, 2);
-              setSavedWizardStep(2);
-            }
             await refreshProfileCompletion();
           }}
           profile={profile ?? {}}

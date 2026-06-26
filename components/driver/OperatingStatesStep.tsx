@@ -1,14 +1,27 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useState,
+} from 'react';
 import DrivingStateMultiSelect from '@/components/driver/DrivingStateMultiSelect';
 import InlineToast from '@/components/ui/InlineToast';
 import { refreshRequiredDocumentsClient } from '@/lib/driver/refresh-required-documents';
+import type { WizardStepSaveResult } from '@/lib/driver/wizard-step-save';
 import { formatStateList, normalizeStateCodes } from '@/lib/driver/us-states';
 
 export type OperatingStatesSaveResult = {
   drivingStates: string[];
   requiredDocumentCount: number;
+};
+
+export type OperatingStatesStepHandle = {
+  getDraftStates: () => string[];
+  save: (options?: { requireStates?: boolean }) => Promise<WizardStepSaveResult>;
 };
 
 type OperatingStatesStepProps = {
@@ -24,12 +37,11 @@ function statesEqual(a: string[], b: string[]): boolean {
   return left === right;
 }
 
-export default function OperatingStatesStep({
-  initialStates = [],
-  onSaved,
-  onDirtyChange,
-  variant = 'wizard',
-}: OperatingStatesStepProps) {
+const OperatingStatesStep = forwardRef<OperatingStatesStepHandle, OperatingStatesStepProps>(
+  function OperatingStatesStep(
+    { initialStates = [], onSaved, onDirtyChange, variant = 'wizard' },
+    ref
+  ) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [draftStates, setDraftStates] = useState<string[]>(normalizeStateCodes(initialStates));
@@ -91,60 +103,93 @@ export default function OperatingStatesStep({
     loadStates();
   }, [loadStates]);
 
-  const save = async () => {
-    if (draftStates.length === 0) {
-      setError('Select at least one state where you plan to drive.');
-      return;
-    }
+  const persistStates = useCallback(
+    async (options?: { requireStates?: boolean }): Promise<WizardStepSaveResult> => {
+      const requireStates = options?.requireStates ?? true;
 
-    setSaving(true);
-    setError(null);
-    setToast(null);
-
-    try {
-      const res = await fetch('/api/driver/driving-states', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ drivingStates: draftStates }),
-      });
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error || 'Failed to save operating states.');
+      if (draftStates.length === 0) {
+        if (!requireStates) {
+          return { ok: true };
+        }
+        const message = 'Select at least one state where you plan to drive.';
+        setError(message);
+        return { ok: false, error: message };
       }
 
-      const saved = normalizeStateCodes(data.drivingStates);
-      setDraftStates(saved);
-      setSavedStates(saved);
+      if (!isDirty && savedStates.length > 0) {
+        return { ok: true };
+      }
 
-      let docCount = Number(data.requiredDocumentCount) || 0;
+      setSaving(true);
+      setError(null);
+      setToast(null);
+
       try {
-        const refreshed = await refreshRequiredDocumentsClient();
-        docCount = refreshed.documentCount;
-      } catch {
-        // PATCH count is acceptable fallback
+        const res = await fetch('/api/driver/driving-states', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ drivingStates: draftStates }),
+        });
+        const data = await res.json();
+
+        if (!res.ok) {
+          throw new Error(data.error || 'Failed to save operating states.');
+        }
+
+        const saved = normalizeStateCodes(data.drivingStates);
+        setDraftStates(saved);
+        setSavedStates(saved);
+
+        let docCount = Number(data.requiredDocumentCount) || 0;
+        try {
+          const refreshed = await refreshRequiredDocumentsClient();
+          docCount = refreshed.documentCount;
+        } catch {
+          // PATCH count is acceptable fallback
+        }
+
+        setRequiredDocumentCount(docCount);
+
+        const result: OperatingStatesSaveResult = {
+          drivingStates: saved,
+          requiredDocumentCount: docCount,
+        };
+
+        await onSaved?.(result);
+
+        if (variant === 'card') {
+          setToast({
+            tone: 'success',
+            message: `Operating states saved (${formatStateList(saved)}). ${docCount} required document${docCount === 1 ? '' : 's'} now apply.`,
+          });
+        }
+
+        return { ok: true };
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Failed to save operating states.';
+        setError(message);
+        if (variant === 'card') {
+          setToast({ tone: 'error', message });
+        }
+        return { ok: false, error: message };
+      } finally {
+        setSaving(false);
       }
+    },
+    [draftStates, isDirty, onSaved, savedStates.length, variant]
+  );
 
-      setRequiredDocumentCount(docCount);
+  useImperativeHandle(
+    ref,
+    () => ({
+      getDraftStates: () => normalizeStateCodes(draftStates),
+      save: persistStates,
+    }),
+    [draftStates, persistStates]
+  );
 
-      const result: OperatingStatesSaveResult = {
-        drivingStates: saved,
-        requiredDocumentCount: docCount,
-      };
-
-      await onSaved?.(result);
-
-      setToast({
-        tone: 'success',
-        message: `Operating states saved (${formatStateList(saved)}). ${docCount} required document${docCount === 1 ? '' : 's'} now apply.`,
-      });
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Failed to save operating states.';
-      setError(message);
-      setToast({ tone: 'error', message });
-    } finally {
-      setSaving(false);
-    }
+  const save = () => {
+    void persistStates({ requireStates: true });
   };
 
   if (loading) {
@@ -193,35 +238,51 @@ export default function OperatingStatesStep({
           disabled={saving}
         />
 
-        <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center">
-          <button
-            type="button"
-            onClick={save}
-            disabled={saving || draftStates.length === 0 || (!isDirty && savedStates.length > 0)}
-            className="inline-flex min-h-11 items-center justify-center rounded-xl bg-[#1E3A8A] px-6 py-2.5 text-sm font-semibold text-white transition hover:bg-[#162D6B] disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {saving ? (
-              <span className="inline-flex items-center gap-2">
-                <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-                Saving...
-              </span>
-            ) : isDirty || savedStates.length === 0 ? (
-              'Save Operating States'
-            ) : (
-              'Saved'
-            )}
-          </button>
+        {variant === 'card' ? (
+          <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center">
+            <button
+              type="button"
+              onClick={save}
+              disabled={saving || draftStates.length === 0 || (!isDirty && savedStates.length > 0)}
+              className="inline-flex min-h-11 items-center justify-center rounded-xl bg-[#1E3A8A] px-6 py-2.5 text-sm font-semibold text-white transition hover:bg-[#162D6B] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {saving ? (
+                <span className="inline-flex items-center gap-2">
+                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                  Saving...
+                </span>
+              ) : isDirty || savedStates.length === 0 ? (
+                'Save Operating States'
+              ) : (
+                'Saved'
+              )}
+            </button>
 
-          {isDirty && (
-            <span className="text-sm text-amber-700">You have unsaved changes.</span>
-          )}
-          {!isDirty && savedStates.length > 0 && requiredDocumentCount != null && (
-            <span className="text-sm text-emerald-700">
-              {requiredDocumentCount} document{requiredDocumentCount === 1 ? '' : 's'} required for
-              your states.
-            </span>
-          )}
-        </div>
+            {isDirty && (
+              <span className="text-sm text-amber-700">You have unsaved changes.</span>
+            )}
+            {!isDirty && savedStates.length > 0 && requiredDocumentCount != null && (
+              <span className="text-sm text-emerald-700">
+                {requiredDocumentCount} document{requiredDocumentCount === 1 ? '' : 's'} required for
+                your states.
+              </span>
+            )}
+          </div>
+        ) : (
+          <div className="mt-5 space-y-2">
+            {isDirty && (
+              <p className="text-sm text-amber-700">
+                Your selections will be saved when you continue to the next step.
+              </p>
+            )}
+            {savedStates.length > 0 && requiredDocumentCount != null && (
+              <p className="text-sm text-emerald-700">
+                {requiredDocumentCount} document{requiredDocumentCount === 1 ? '' : 's'} required for
+                your selected states.
+              </p>
+            )}
+          </div>
+        )}
 
         {error && (
           <div
@@ -242,4 +303,6 @@ export default function OperatingStatesStep({
       )}
     </>
   );
-}
+});
+
+export default OperatingStatesStep;

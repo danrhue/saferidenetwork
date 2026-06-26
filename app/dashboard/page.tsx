@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import PendingTasksSection from '@/components/driver/PendingTasksSection';
 import ProfilePhotoRejectionPanel from '@/components/driver/ProfilePhotoRejectionPanel';
@@ -10,12 +11,22 @@ import { useDriverOverview } from '@/lib/driver/useDriverOverview';
 import { resolveProfilePhotoForProfile } from '@/lib/storage/profile-photos';
 
 export default function DashboardOverview() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [user, setUser] = useState<{ id?: string; email?: string; user_metadata?: { full_name?: string } } | null>(
     null
   );
+  const [profileSavedMessage, setProfileSavedMessage] = useState(false);
   const { loading, pendingTasks, stats, profile, refresh } = useDriverOverview();
   const [profilePhotoUrl, setProfilePhotoUrl] = useState<string | null>(null);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+
+  useEffect(() => {
+    if (searchParams.get('profileSaved') === '1') {
+      setProfileSavedMessage(true);
+      router.replace('/dashboard', { scroll: false });
+    }
+  }, [router, searchParams]);
 
   useEffect(() => {
     const getUser = async () => {
@@ -76,6 +87,20 @@ export default function DashboardOverview() {
 
   return (
     <div>
+      {profileSavedMessage && (
+        <div className="mb-8 rounded-2xl border border-green-200 bg-green-50 px-6 py-4 text-sm text-green-800">
+          <strong>Profile progress saved.</strong> You can return to your profile anytime to pick up
+          where you left off.
+          <button
+            type="button"
+            onClick={() => setProfileSavedMessage(false)}
+            className="ml-3 text-green-900 underline hover:no-underline"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
       {photoRejected && (
         <ProfilePhotoRejectionPanel
           photoUrl={profilePhotoUrl}

@@ -1,9 +1,11 @@
 'use client';
 
 import Link from 'next/link';
-import { InputHTMLAttributes, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { InputHTMLAttributes, useMemo, useRef, useState } from 'react';
 import OperatingStatesStep, {
   type OperatingStatesSaveResult,
+  type OperatingStatesStepHandle,
 } from '@/components/driver/OperatingStatesStep';
 import { calculateDriverCompletion } from '@/lib/driver/onboarding-completion';
 import type { WizardStepSaveResult } from '@/lib/driver/wizard-step-save';
@@ -31,6 +33,10 @@ function hasValue(profile: PersonalProfile, field: string): boolean {
   if (value == null || value === '') return false;
   if (typeof value === 'string') return value.trim().length > 0;
   return true;
+}
+
+function formatLastSavedAt(date: Date): string {
+  return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 }
 
 export type DriverOnboardingWizardProps = {
@@ -116,11 +122,14 @@ export default function DriverOnboardingWizard(props: DriverOnboardingWizardProp
     onDrivingStatesSaved,
   } = props;
 
+  const router = useRouter();
+  const operatingStatesRef = useRef<OperatingStatesStepHandle>(null);
   const [currentStep, setCurrentStep] = useState(clampWizardStep(initialStep));
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [stepSaving, setStepSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
 
   const completionProfile = useMemo(
     () => ({
@@ -156,13 +165,16 @@ export default function DriverOnboardingWizard(props: DriverOnboardingWizardProp
     const newErrors: Record<string, string> = {};
 
     if (step === 2) {
-      const states = normalizeStateCodes(profile.driving_states as string[] | undefined);
-      if (states.length === 0) {
-        newErrors.driving_states =
-          'Select at least one operating state, then click Save Operating States.';
+      const draftStates =
+        step === currentStep
+          ? operatingStatesRef.current?.getDraftStates() ??
+            normalizeStateCodes(profile.driving_states as string[] | undefined)
+          : normalizeStateCodes(profile.driving_states as string[] | undefined);
+      if (draftStates.length === 0) {
+        newErrors.driving_states = 'Select at least one operating state before continuing.';
       }
       setErrors(newErrors);
-      return states.length === 0 ? false : true;
+      return draftStates.length === 0 ? false : true;
     }
 
     if (step === 8) {
@@ -204,9 +216,14 @@ export default function DriverOnboardingWizard(props: DriverOnboardingWizardProp
     return Object.keys(newErrors).length === 0;
   };
 
-  const advanceToStep = async (next: number) => {
+  const markSaveSuccess = (message = 'Progress saved.') => {
+    setLastSavedAt(new Date());
+    setSaveSuccess(message);
+  };
+
+  const advanceToStep = async (next: number, message?: string) => {
     setCurrentStep(next);
-    setSaveSuccess('Progress saved.');
+    markSaveSuccess(message);
     await onStepAdvanced?.(next);
   };
 
@@ -216,71 +233,62 @@ export default function DriverOnboardingWizard(props: DriverOnboardingWizardProp
     }
   };
 
-  const nextStep = async () => {
+  const saveCurrentStep = async (options?: { requireStates?: boolean }) => {
+    if (currentStep === 2) {
+      const statesResult = await operatingStatesRef.current?.save({
+        requireStates: options?.requireStates ?? true,
+      });
+      if (!statesResult?.ok) {
+        return statesResult ?? { ok: false, error: 'Unable to save operating states.' };
+      }
+    }
+
+    return onSaveStep(currentStep);
+  };
+
+  const navigateToStep = async (
+    targetStep: number,
+    options?: { validateForward?: boolean; successMessage?: string }
+  ) => {
+    if (targetStep === currentStep || stepSaving) return;
+
+    const isForward = targetStep > currentStep;
     setSaveError(null);
     setSaveSuccess(null);
-    if (!validateStep()) {
+
+    if (isForward && (options?.validateForward ?? true) && !validateStep()) {
       handleValidationFailure();
       return;
     }
 
     setStepSaving(true);
     try {
-      const result = await onSaveStep(currentStep);
+      const result = await saveCurrentStep({
+        requireStates: isForward,
+      });
       if (!result.ok) {
         setSaveError(result.error);
         return;
       }
 
-      if (currentStep < WIZARD_STEPS.length) {
-        await advanceToStep(currentStep + 1);
-      }
+      await advanceToStep(targetStep, options?.successMessage);
     } finally {
       setStepSaving(false);
     }
+  };
+
+  const nextStep = async () => {
+    if (currentStep >= WIZARD_STEPS.length) return;
+    await navigateToStep(currentStep + 1, { validateForward: true });
   };
 
   const goToStep = async (targetStep: number) => {
-    if (targetStep === currentStep || stepSaving) return;
-
-    if (targetStep < currentStep) {
-      setSaveError(null);
-      setSaveSuccess(null);
-      setCurrentStep(targetStep);
-      void onStepAdvanced?.(targetStep);
-      return;
-    }
-
-    setSaveError(null);
-    setSaveSuccess(null);
-    if (!validateStep()) {
-      handleValidationFailure();
-      return;
-    }
-
-    setStepSaving(true);
-    try {
-      const result = await onSaveStep(currentStep);
-      if (!result.ok) {
-        setSaveError(result.error);
-        return;
-      }
-      setCurrentStep(targetStep);
-      setSaveSuccess('Progress saved.');
-      await onStepAdvanced?.(targetStep);
-    } finally {
-      setStepSaving(false);
-    }
+    await navigateToStep(targetStep, { validateForward: targetStep > currentStep });
   };
 
-  const prevStep = () => {
-    if (currentStep > 1) {
-      setSaveError(null);
-      setSaveSuccess(null);
-      const prev = currentStep - 1;
-      setCurrentStep(prev);
-      void onStepAdvanced?.(prev);
-    }
+  const prevStep = async () => {
+    if (currentStep <= 1 || stepSaving) return;
+    await navigateToStep(currentStep - 1, { validateForward: false });
   };
 
   const finishOnboarding = async () => {
@@ -288,13 +296,32 @@ export default function DriverOnboardingWizard(props: DriverOnboardingWizardProp
     setSaveSuccess(null);
     setStepSaving(true);
     try {
-      const result = await onSaveStep(currentStep);
+      const result = await saveCurrentStep({ requireStates: true });
       if (!result.ok) {
         setSaveError(result.error);
         return;
       }
-      setSaveSuccess('Onboarding progress saved. Complete any remaining steps to activate your account.');
+      markSaveSuccess(
+        'Onboarding progress saved. Complete any remaining steps to activate your account.'
+      );
       await onStepAdvanced?.(currentStep);
+    } finally {
+      setStepSaving(false);
+    }
+  };
+
+  const saveAndExit = async () => {
+    setSaveError(null);
+    setSaveSuccess(null);
+    setStepSaving(true);
+    try {
+      const result = await saveCurrentStep({ requireStates: false });
+      if (!result.ok) {
+        setSaveError(result.error);
+        return;
+      }
+      markSaveSuccess('Your progress has been saved.');
+      router.push('/dashboard?profileSaved=1');
     } finally {
       setStepSaving(false);
     }
@@ -302,14 +329,29 @@ export default function DriverOnboardingWizard(props: DriverOnboardingWizardProp
 
   return (
     <div className="mb-8">
-      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-8">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4 mb-8">
         <div>
           <h1 className="text-4xl font-bold text-gray-900">Complete Your Profile</h1>
           <p className="text-gray-600 mt-1">Finish all steps to activate your driver account</p>
+          {lastSavedAt && (
+            <p className="text-sm text-emerald-700 mt-2" aria-live="polite">
+              Last saved at {formatLastSavedAt(lastSavedAt)}
+            </p>
+          )}
         </div>
-        <div className="text-right">
-          <div className="text-5xl font-bold text-[#1E3A8A]">{completion}%</div>
-          <div className="text-sm text-gray-500">Complete</div>
+        <div className="flex flex-col items-end gap-3">
+          <button
+            type="button"
+            onClick={() => void saveAndExit()}
+            disabled={stepSaving}
+            className="px-5 py-2.5 border border-gray-300 rounded-xl text-sm font-medium text-blue-950 hover:bg-gray-50 disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            {stepSaving ? 'Saving…' : 'Save & Exit'}
+          </button>
+          <div className="text-right">
+            <div className="text-5xl font-bold text-[#1E3A8A]">{completion}%</div>
+            <div className="text-sm text-gray-500">Complete</div>
+          </div>
         </div>
       </div>
 
@@ -354,6 +396,7 @@ export default function DriverOnboardingWizard(props: DriverOnboardingWizardProp
         {currentStep === 2 && (
           <div>
             <OperatingStatesStep
+              ref={operatingStatesRef}
               variant="wizard"
               initialStates={(profile.driving_states as string[] | undefined) ?? []}
               onSaved={async (result) => {
@@ -462,11 +505,11 @@ export default function DriverOnboardingWizard(props: DriverOnboardingWizardProp
       <div className="flex justify-between mt-6">
         <button
           type="button"
-          onClick={prevStep}
+          onClick={() => void prevStep()}
           disabled={currentStep === 1 || stepSaving}
           className="px-10 py-4 border border-gray-300 rounded-2xl text-blue-950 disabled:opacity-40 hover:bg-gray-50"
         >
-          Previous
+          {stepSaving ? 'Saving…' : 'Previous'}
         </button>
 
         {currentStep < WIZARD_STEPS.length ? (

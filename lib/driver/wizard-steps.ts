@@ -33,17 +33,18 @@ export const WIZARD_MAILING_FIELDS = [
   'mailing_postal_code',
 ] as const;
 
-/** Steps that persist profile/vehicle data when leaving via Next. */
-export const WIZARD_PERSONAL_SAVE_STEPS = new Set([1, 3, 4, 5, 6]);
+/** Steps that persist personal profile fields when leaving via navigation. */
+export const WIZARD_PERSONAL_SAVE_STEPS = new Set([1, 3, 4, 5, 6, 7]);
 
 export function clampWizardStep(step: number): number {
   return Math.min(Math.max(Math.trunc(step) || 1, 1), WIZARD_STEP_COUNT);
 }
 
 export function stepRequiresDataSave(step: number): boolean {
-  return WIZARD_PERSONAL_SAVE_STEPS.has(step) || step === 8;
+  return WIZARD_PERSONAL_SAVE_STEPS.has(step) || step === 2 || step === 8;
 }
 
+/** Steps that only persist the wizard step index (no field payload). */
 export function stepPersistsProgressOnly(step: number): boolean {
-  return step === 2 || step === 7 || step === 9 || step === 10;
+  return step === 9 || step === 10;
 }
