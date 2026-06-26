@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabase';
 import PendingTasksSection from '@/components/driver/PendingTasksSection';
 import ProfilePhotoRejectionPanel from '@/components/driver/ProfilePhotoRejectionPanel';
 import { submitDriverProfilePhoto } from '@/lib/driver/profile-photo-upload';
+import { getDriverGreetingName } from '@/lib/driver/display-name';
 import { useDriverOverview } from '@/lib/driver/useDriverOverview';
 import { resolveProfilePhotoForProfile } from '@/lib/storage/profile-photos';
 
@@ -24,9 +25,10 @@ export default function DashboardOverview() {
   useEffect(() => {
     if (searchParams.get('profileSaved') === '1') {
       setProfileSavedMessage(true);
+      void refresh();
       router.replace('/dashboard', { scroll: false });
     }
-  }, [router, searchParams]);
+  }, [router, searchParams, refresh]);
 
   useEffect(() => {
     const getUser = async () => {
@@ -73,7 +75,10 @@ export default function DashboardOverview() {
     return <div className="p-8 text-blue-950">Loading your overview...</div>;
   }
 
-  const firstName = user?.user_metadata?.full_name?.split(' ')[0] || 'Driver';
+  const firstName = getDriverGreetingName(
+    profile,
+    user?.user_metadata?.full_name
+  );
   const accountStatusClass =
     stats.accountStatusTone === 'green'
       ? 'text-green-600'
