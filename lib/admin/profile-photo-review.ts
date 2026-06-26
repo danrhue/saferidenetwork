@@ -310,6 +310,17 @@ async function loadProfilePhotoRows(
 ): Promise<ProfilePhotoListRow[]> {
   let { data, error } = await buildProfilePhotoListQuery(admin, filters);
 
+  if (
+    error &&
+    (isMissingRelationError(error.message) ||
+      error.message.includes('driver_profile_photos_admin_view'))
+  ) {
+    console.warn(
+      '[profile-photo-review] Ignoring missing admin view — querying profiles directly.'
+    );
+    ({ data, error } = await buildProfilePhotoListQuery(admin, filters));
+  }
+
   if (error && isMissingColumnError(error.message) && error.message.includes('deleted_at')) {
     console.warn(
       '[profile-photo-review] deleted_at column missing; listing without soft-delete filter.'

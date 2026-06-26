@@ -30,7 +30,11 @@ export async function GET(request: Request) {
       from: searchParams.get('from'),
       to: searchParams.get('to'),
     });
-    return NextResponse.json(drivers);
+    return NextResponse.json(drivers, {
+      headers: {
+        'Cache-Control': 'no-store, max-age=0',
+      },
+    });
   } catch (error) {
     const message = getErrorMessage(error);
     console.error('[api/admin/profile-photos] List failed:', message, error);
