@@ -2,11 +2,18 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { InputHTMLAttributes, useMemo, useRef, useState } from 'react';
+import {
+  InputHTMLAttributes,
+  useCallback,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import OperatingStatesStep, {
   type OperatingStatesSaveResult,
   type OperatingStatesStepHandle,
 } from '@/components/driver/OperatingStatesStep';
+import { useRegisterWizardLeaveGuard } from '@/components/driver/WizardLeaveGuard';
 import { calculateDriverCompletion } from '@/lib/driver/onboarding-completion';
 import type { WizardStepSaveResult } from '@/lib/driver/wizard-step-save';
 import {
@@ -128,8 +135,18 @@ export default function DriverOnboardingWizard(props: DriverOnboardingWizardProp
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [stepSaving, setStepSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveErrorContext, setSaveErrorContext] = useState<'step' | 'exit' | null>(null);
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [operatingStatesDirty, setOperatingStatesDirty] = useState(false);
+
+  const hasUnsavedChangesOnStep =
+    hasUnsavedChanges || (currentStep === 2 && operatingStatesDirty);
+
+  const clearUnsavedChanges = useCallback(() => {
+    setHasUnsavedChanges(false);
+  }, []);
 
   const completionProfile = useMemo(
     () => ({
@@ -151,10 +168,27 @@ export default function DriverOnboardingWizard(props: DriverOnboardingWizardProp
 
   const handleChange = (field: string, value: unknown) => {
     onChange(field, value);
+    setHasUnsavedChanges(true);
     if (errors[field]) {
       setErrors((prev) => ({ ...prev, [field]: '' }));
     }
   };
+
+  const handleVehicleFieldChange = useCallback(
+    (setter: (value: string) => void) => (value: string) => {
+      setter(value);
+      setHasUnsavedChanges(true);
+    },
+    []
+  );
+
+  const handlePassengerCapacityChange = useCallback(
+    (value: string) => {
+      onPassengerCapacityChange(value);
+      setHasUnsavedChanges(true);
+    },
+    [onPassengerCapacityChange]
+  );
 
   const validateStep = (step = currentStep) => {
     if (step >= 7) {
@@ -217,6 +251,7 @@ export default function DriverOnboardingWizard(props: DriverOnboardingWizardProp
   };
 
   const markSaveSuccess = (message = 'Progress saved.') => {
+    clearUnsavedChanges();
     setLastSavedAt(new Date());
     setSaveSuccess(message);
   };
@@ -254,6 +289,7 @@ export default function DriverOnboardingWizard(props: DriverOnboardingWizardProp
 
     const isForward = targetStep > currentStep;
     setSaveError(null);
+    setSaveErrorContext(null);
     setSaveSuccess(null);
 
     if (isForward && (options?.validateForward ?? true) && !validateStep()) {
@@ -293,6 +329,7 @@ export default function DriverOnboardingWizard(props: DriverOnboardingWizardProp
 
   const finishOnboarding = async () => {
     setSaveError(null);
+    setSaveErrorContext(null);
     setSaveSuccess(null);
     setStepSaving(true);
     try {
@@ -310,22 +347,38 @@ export default function DriverOnboardingWizard(props: DriverOnboardingWizardProp
     }
   };
 
-  const saveAndExit = async () => {
+  const saveAndExitRef = useRef<() => Promise<boolean>>(async () => false);
+  saveAndExitRef.current = async () => {
     setSaveError(null);
+    setSaveErrorContext(null);
     setSaveSuccess(null);
     setStepSaving(true);
     try {
       const result = await saveCurrentStep({ requireStates: false });
       if (!result.ok) {
+        setSaveErrorContext('exit');
         setSaveError(result.error);
-        return;
+        return false;
       }
       markSaveSuccess('Your progress has been saved.');
       router.push('/dashboard?profileSaved=1');
+      return true;
     } finally {
       setStepSaving(false);
     }
   };
+
+  const saveAndExit = () => saveAndExitRef.current();
+
+  const leaveGuardRegistration = useMemo(
+    () => ({
+      isDirty: hasUnsavedChangesOnStep && !stepSaving,
+      saveAndExit: () => saveAndExitRef.current(),
+    }),
+    [hasUnsavedChangesOnStep, stepSaving]
+  );
+
+  useRegisterWizardLeaveGuard(leaveGuardRegistration);
 
   return (
     <div className="mb-8">
@@ -333,11 +386,16 @@ export default function DriverOnboardingWizard(props: DriverOnboardingWizardProp
         <div>
           <h1 className="text-4xl font-bold text-gray-900">Complete Your Profile</h1>
           <p className="text-gray-600 mt-1">Finish all steps to activate your driver account</p>
-          {lastSavedAt && (
-            <p className="text-sm text-emerald-700 mt-2" aria-live="polite">
-              Last saved at {formatLastSavedAt(lastSavedAt)}
-            </p>
-          )}
+          <div className="mt-2 space-y-1" aria-live="polite">
+            {lastSavedAt && (
+              <p className="text-sm text-emerald-700">
+                Last saved at {formatLastSavedAt(lastSavedAt)}
+              </p>
+            )}
+            {hasUnsavedChangesOnStep && !stepSaving && (
+              <p className="text-sm text-amber-700">Unsaved changes on this step</p>
+            )}
+          </div>
         </div>
         <div className="flex flex-col items-end gap-3">
           <button
@@ -399,8 +457,10 @@ export default function DriverOnboardingWizard(props: DriverOnboardingWizardProp
               ref={operatingStatesRef}
               variant="wizard"
               initialStates={(profile.driving_states as string[] | undefined) ?? []}
+              onDirtyChange={setOperatingStatesDirty}
               onSaved={async (result) => {
-                handleChange('driving_states', result.drivingStates);
+                onChange('driving_states', result.drivingStates);
+                setOperatingStatesDirty(false);
                 await onDrivingStatesSaved?.(result);
               }}
             />
@@ -448,11 +508,11 @@ export default function DriverOnboardingWizard(props: DriverOnboardingWizardProp
             vehicleModel={vehicleModel}
             passengerCapacity={passengerCapacity}
             seatingOverrideNote={seatingOverrideNote}
-            onVehicleYearChange={onVehicleYearChange}
-            onVehicleMakeChange={onVehicleMakeChange}
-            onVehicleModelChange={onVehicleModelChange}
-            onPassengerCapacityChange={onPassengerCapacityChange}
-            onSeatingOverrideNoteChange={onSeatingOverrideNoteChange}
+            onVehicleYearChange={handleVehicleFieldChange(onVehicleYearChange)}
+            onVehicleMakeChange={handleVehicleFieldChange(onVehicleMakeChange)}
+            onVehicleModelChange={handleVehicleFieldChange(onVehicleModelChange)}
+            onPassengerCapacityChange={handlePassengerCapacityChange}
+            onSeatingOverrideNoteChange={handleVehicleFieldChange(onSeatingOverrideNoteChange)}
             capacitySuggestion={capacitySuggestion}
             isCapacityOverride={isCapacityOverride}
             seatingStatus={seatingStatus}
@@ -490,8 +550,17 @@ export default function DriverOnboardingWizard(props: DriverOnboardingWizardProp
               className="p-4 bg-red-50 border border-red-200 rounded-xl text-sm text-red-800"
               role="alert"
             >
-              <strong>Could not save this step.</strong> {saveError} Your entries are still on this
-              page — fix the issue and try again.
+              {saveErrorContext === 'exit' ? (
+                <>
+                  <strong>Could not save before exiting.</strong> {saveError} You are still on this
+                  step — fix the issue and try Save &amp; Exit again.
+                </>
+              ) : (
+                <>
+                  <strong>Could not save this step.</strong> {saveError} Your entries are still on
+                  this page — fix the issue and try again.
+                </>
+              )}
             </div>
           )}
           {saveSuccess && !saveError && (

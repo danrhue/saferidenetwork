@@ -23,14 +23,19 @@ import SidebarDrawer, {
   type PortalNavSection,
 } from '@/components/portal/SidebarDrawer';
 import TopBar from '@/components/layout/TopBar';
+import {
+  WizardLeaveGuardProvider,
+  useWizardLeaveGuard,
+} from '@/components/driver/WizardLeaveGuard';
 
-export default function DashboardLayout({
+function DashboardLayoutShell({
   children,
 }: {
   children: React.ReactNode;
 }) {
   const router = useRouter();
   const pathname = usePathname();
+  const { confirmLeave } = useWizardLeaveGuard();
   const [user, setUser] = useState<any>(null);
   const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -142,9 +147,13 @@ export default function DashboardLayout({
     getUser();
   }, [router]);
 
-  const handleSignOut = async () => {
-    await supabase.auth.signOut();
-    router.push('/login');
+  const handleSignOut = () => {
+    confirmLeave(() => {
+      void (async () => {
+        await supabase.auth.signOut();
+        router.push('/login');
+      })();
+    });
   };
 
   if (loading) {
@@ -245,5 +254,17 @@ export default function DashboardLayout({
         </div>
       </div>
     </div>
+  );
+}
+
+export default function DashboardLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <WizardLeaveGuardProvider>
+      <DashboardLayoutShell>{children}</DashboardLayoutShell>
+    </WizardLeaveGuardProvider>
   );
 }
