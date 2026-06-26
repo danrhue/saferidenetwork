@@ -10,12 +10,10 @@ export type ProfilePhotoReviewResult = {
   failed: { profileId: string; error: string }[];
 };
 
-/** Email lives in auth.users — never select profiles.email. */
-const PROFILE_PHOTO_ADMIN_VIEW = 'driver_profile_photos_admin_view';
-
-const PROFILE_PHOTO_LIST_SELECT =
-  'id, full_name, phone, email, profile_photo_url, profile_photo_status, profile_photo_rejection_reason, updated_at, deleted_at';
-
+/**
+ * Email lives in auth.users only — never select profiles.email.
+ * Profiles query is the single source of truth; emails are enriched via service role.
+ */
 const PROFILE_PHOTO_PROFILES_SELECT =
   'id, full_name, phone, profile_photo_url, profile_photo_status, profile_photo_rejection_reason, updated_at';
 
@@ -41,7 +39,16 @@ function isMissingColumnError(message: string): boolean {
 
 function isMissingRelationError(message: string): boolean {
   const lower = message.toLowerCase();
-  return lower.includes('relation') && lower.includes('does not exist');
+  return (
+    (lower.includes('relation') && lower.includes('does not exist')) ||
+    lower.includes('could not find the table') ||
+    lower.includes('schema cache')
+  );
+}
+
+function isProfilesEmailColumnError(message: string): boolean {
+  const lower = message.toLowerCase();
+  return lower.includes('profiles.email') || lower.includes('column') && lower.includes('email');
 }
 
 function throwQueryError(context: string, error: PostgrestError): never {
@@ -243,20 +250,16 @@ export type ProfilePhotoListFilters = {
 function buildProfilePhotoListQuery(
   admin: SupabaseClient,
   filters: ProfilePhotoListFilters,
-  options?: { excludeDeleted?: boolean; source?: 'view' | 'profiles' }
+  options?: { excludeDeleted?: boolean }
 ) {
   const status = filters.status ?? 'pending';
-  const source = options?.source ?? 'view';
 
   let query = admin
-    .from(source === 'view' ? PROFILE_PHOTO_ADMIN_VIEW : 'profiles')
-    .select(source === 'view' ? PROFILE_PHOTO_LIST_SELECT : PROFILE_PHOTO_PROFILES_SELECT)
+    .from('profiles')
+    .select(PROFILE_PHOTO_PROFILES_SELECT)
+    .eq('role', 'driver')
     .not('profile_photo_url', 'is', null)
     .order('updated_at', { ascending: false });
-
-  if (source === 'profiles') {
-    query = query.eq('role', 'driver');
-  }
 
   if (options?.excludeDeleted !== false) {
     query = query.is('deleted_at', null);
@@ -284,29 +287,46 @@ function buildProfilePhotoListQuery(
   return query;
 }
 
+async function attachAuthEmails(
+  admin: SupabaseClient,
+  rows: ProfilePhotoListRow[]
+): Promise<ProfilePhotoListRow[]> {
+  if (rows.length === 0) return rows;
+
+  const emailById = await fetchAuthEmailsByUserIds(
+    admin,
+    rows.map((row) => row.id)
+  );
+
+  return rows.map((row) => ({
+    ...row,
+    email: emailById[row.id] ?? null,
+  }));
+}
+
 async function loadProfilePhotoRows(
   admin: SupabaseClient,
   filters: ProfilePhotoListFilters
 ): Promise<ProfilePhotoListRow[]> {
-  let source: 'view' | 'profiles' = 'view';
-  let { data, error } = await buildProfilePhotoListQuery(admin, filters, { source });
-
-  if (error && isMissingRelationError(error.message)) {
-    console.warn(
-      `[profile-photo-review] ${PROFILE_PHOTO_ADMIN_VIEW} not found; falling back to profiles + auth.users lookup. Run driver_profile_photos_admin_view.sql.`
-    );
-    source = 'profiles';
-    ({ data, error } = await buildProfilePhotoListQuery(admin, filters, { source }));
-  }
+  let { data, error } = await buildProfilePhotoListQuery(admin, filters);
 
   if (error && isMissingColumnError(error.message) && error.message.includes('deleted_at')) {
     console.warn(
       '[profile-photo-review] deleted_at column missing; listing without soft-delete filter.'
     );
     ({ data, error } = await buildProfilePhotoListQuery(admin, filters, {
-      source,
       excludeDeleted: false,
     }));
+  }
+
+  if (error && isProfilesEmailColumnError(error.message)) {
+    console.error(
+      '[profile-photo-review] Unexpected profiles.email in query — verify deployed code uses PROFILE_PHOTO_PROFILES_SELECT only.',
+      error.message
+    );
+    throw new Error(
+      'Profile photo query referenced profiles.email. Deploy the latest admin API build.'
+    );
   }
 
   if (error) {
@@ -314,19 +334,7 @@ async function loadProfilePhotoRows(
   }
 
   const rows = (data ?? []) as unknown as ProfilePhotoListRow[];
-
-  if (source === 'profiles') {
-    const emailById = await fetchAuthEmailsByUserIds(
-      admin,
-      rows.map((row) => row.id)
-    );
-    return rows.map((row) => ({
-      ...row,
-      email: emailById[row.id] ?? null,
-    }));
-  }
-
-  return rows;
+  return attachAuthEmails(admin, rows);
 }
 
 export async function listDriverProfilePhotos(

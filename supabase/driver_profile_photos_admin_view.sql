@@ -1,5 +1,5 @@
--- Admin profile photo review: profiles joined to auth.users for email
--- Run in Supabase SQL Editor. Queried by service role from listDriverProfilePhotos().
+-- Optional: profiles joined to auth.users for email (reference / reporting only).
+-- The admin API loads email via auth.admin.getUserById() — this view is not required.
 
 CREATE OR REPLACE VIEW public.driver_profile_photos_admin_view AS
 SELECT
