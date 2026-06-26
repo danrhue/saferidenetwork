@@ -10,8 +10,6 @@ export type PortalNavItem = {
   label: string;
   badge?: string;
   icon?: ReactNode;
-  /** Short helper text shown under the label (expanded sidebar only). */
-  description?: string;
   /** Additional path prefixes that should mark this link active */
   matchPaths?: string[];
 };
@@ -54,8 +52,6 @@ function renderNavLink(
     ) ??
       false);
 
-  const showDescription = !collapsed && item.description;
-
   return (
     <Link
       key={item.href}
@@ -63,12 +59,8 @@ function renderNavLink(
       onClick={onClose}
       title={collapsed ? item.label : undefined}
       aria-label={collapsed ? item.label : undefined}
-      className={`group flex rounded-2xl text-sm font-medium transition-all ${
-        showDescription
-          ? 'flex-col gap-1.5 px-5 py-3.5'
-          : `min-h-[44px] items-center gap-3 ${
-              collapsed ? 'justify-center px-3 py-3' : theme === 'dark' ? 'px-5 py-3.5' : 'px-4 py-3'
-            }`
+      className={`group flex min-h-9 items-center gap-2.5 rounded-xl text-xs font-medium transition-all ${
+        collapsed ? 'justify-center px-2 py-2' : theme === 'dark' ? 'px-3 py-2' : 'px-3 py-2'
       } ${
         isActive
           ? theme === 'dark'
@@ -79,54 +71,37 @@ function renderNavLink(
             : 'text-blue-950 hover:bg-gray-100'
       }`}
     >
-      <div className={`flex items-center gap-3 ${showDescription ? 'w-full' : ''}`}>
-        {item.icon && (
-          <span
-            className={`shrink-0 transition-colors ${
-              isActive
-                ? theme === 'dark'
-                  ? 'text-[#1E3A8A]'
-                  : 'text-white'
-                : theme === 'dark'
-                  ? 'text-gray-400 group-hover:text-white'
-                  : 'text-gray-500 group-hover:text-blue-950'
-            }`}
-            aria-hidden
-          >
-            {item.icon}
-          </span>
-        )}
-        {!collapsed && <span className="min-w-0 flex-1">{item.label}</span>}
-        {!collapsed && item.badge && (
-          <span
-            className={`ml-auto shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors ${
-              isActive
-                ? theme === 'dark'
-                  ? 'bg-[#1E3A8A]/10 text-[#1E3A8A]'
-                  : 'bg-white/20 text-white'
-                : theme === 'dark'
-                  ? 'bg-white/10 text-gray-300'
-                  : 'bg-gray-100 text-gray-600 group-hover:bg-white/20 group-hover:text-white'
-            }`}
-          >
-            {item.badge}
-          </span>
-        )}
-      </div>
-      {showDescription && (
-        <p
-          className={`pl-8 text-xs leading-snug ${
+      {item.icon && (
+        <span
+          className={`shrink-0 transition-colors ${
             isActive
               ? theme === 'dark'
-                ? 'text-blue-900/80'
-                : 'text-white/85'
+                ? 'text-[#1E3A8A]'
+                : 'text-white'
               : theme === 'dark'
-                ? 'text-gray-500 group-hover:text-gray-400'
-                : 'text-gray-500 group-hover:text-blue-900/70'
+                ? 'text-gray-400 group-hover:text-white'
+                : 'text-gray-500 group-hover:text-blue-950'
+          }`}
+          aria-hidden
+        >
+          {item.icon}
+        </span>
+      )}
+      {!collapsed && <span className="min-w-0 flex-1">{item.label}</span>}
+      {!collapsed && item.badge && (
+        <span
+          className={`ml-auto shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium transition-colors ${
+            isActive
+              ? theme === 'dark'
+                ? 'bg-[#1E3A8A]/10 text-[#1E3A8A]'
+                : 'bg-white/20 text-white'
+              : theme === 'dark'
+                ? 'bg-white/10 text-gray-300'
+                : 'bg-gray-100 text-gray-600 group-hover:bg-white/20 group-hover:text-white'
           }`}
         >
-          {item.description}
-        </p>
+          {item.badge}
+        </span>
       )}
     </Link>
   );
@@ -214,39 +189,39 @@ export default function SidebarDrawer({
         } w-72 ${isCollapsedDesktop ? 'lg:w-20' : 'lg:w-72'}`}
       >
         <div
-          className={`border-b ${theme === 'dark' ? 'border-white/10' : ''} ${
-            isCollapsedDesktop ? 'p-4' : 'p-8'
+          className={`shrink-0 border-b ${theme === 'dark' ? 'border-white/10' : ''} ${
+            isCollapsedDesktop ? 'p-3' : 'p-4 lg:p-5'
           }`}
         >
           <div className="relative flex flex-col items-center text-center">
             <button
               type="button"
               onClick={onClose}
-              className={`absolute right-0 top-0 rounded-xl p-2 lg:hidden ${
+              className={`absolute right-0 top-0 rounded-lg p-1.5 lg:hidden ${
                 theme === 'dark'
                   ? 'text-gray-300 hover:bg-white/10 hover:text-white'
                   : 'text-blue-950 hover:bg-gray-100'
               }`}
               aria-label="Close menu"
             >
-              <X size={22} strokeWidth={2} />
+              <X size={20} strokeWidth={2} />
             </button>
 
             <Link href={logoHref} onClick={onClose} className="flex flex-col items-center">
               <div
-                className={`mb-4 rounded-3xl bg-white p-4 shadow-md ${
-                  isCollapsedDesktop ? 'lg:mb-0 lg:rounded-2xl lg:p-2.5' : ''
+                className={`mb-2 rounded-2xl bg-white p-2.5 shadow-md ${
+                  isCollapsedDesktop ? 'lg:mb-0 lg:rounded-xl lg:p-2' : ''
                 }`}
               >
                 <img
                   src="/Safe-Ride-Network-Logo.png"
                   alt="Safe Ride Network"
-                  className={`h-16 w-auto ${isCollapsedDesktop ? 'lg:h-9' : ''}`}
+                  className={`h-12 w-auto ${isCollapsedDesktop ? 'lg:h-8' : ''}`}
                 />
               </div>
               {portalSubtitle && (
                 <div
-                  className={`text-center text-sm font-medium uppercase tracking-widest ${
+                  className={`text-center text-[11px] font-medium uppercase tracking-widest ${
                     isCollapsedDesktop ? 'lg:hidden' : ''
                   } ${theme === 'dark' ? 'text-blue-400' : 'text-[#1E3A8A]'}`}
                 >
@@ -257,19 +232,23 @@ export default function SidebarDrawer({
           </div>
         </div>
 
-        <nav className={`flex-1 overflow-y-auto ${isCollapsedDesktop ? 'p-2' : 'p-3 lg:p-4'}`}>
+        <nav
+          className={`min-h-0 flex-1 overflow-y-auto lg:overflow-y-visible ${
+            isCollapsedDesktop ? 'p-2' : 'p-2 lg:p-3'
+          }`}
+        >
           {sections.map((section, index) => (
-            <div key={section.title ?? `section-${index}`} className={index > 0 ? 'pt-4' : ''}>
+            <div key={section.title ?? `section-${index}`} className={index > 0 ? 'pt-2' : ''}>
               {section.title && !isCollapsedDesktop && (
                 <div
-                  className={`mb-2 px-4 text-xs font-semibold tracking-wide ${
+                  className={`mb-1 px-3 text-[10px] font-semibold uppercase tracking-wide ${
                     theme === 'dark' ? 'text-gray-500' : 'text-gray-400'
                   }`}
                 >
                   {section.title}
                 </div>
               )}
-              <div className="space-y-1">
+              <div className="space-y-0.5">
                 {section.items.map((item) =>
                   renderNavLink(item, pathname, logoHref, onClose, isCollapsedDesktop, theme)
                 )}
@@ -280,8 +259,8 @@ export default function SidebarDrawer({
 
         {(footer || footerCollapsed) && (
           <div
-            className={`border-t ${theme === 'dark' ? 'border-white/10' : ''} ${
-              isCollapsedDesktop ? 'p-2' : 'p-4'
+            className={`shrink-0 border-t ${theme === 'dark' ? 'border-white/10' : ''} ${
+              isCollapsedDesktop ? 'p-2' : 'p-3'
             }`}
           >
             {isCollapsedDesktop ? footerCollapsed ?? footer : footer}
@@ -290,14 +269,14 @@ export default function SidebarDrawer({
 
         {collapsible && (
           <div
-            className={`hidden border-t lg:block ${
+            className={`hidden shrink-0 border-t lg:block ${
               theme === 'dark' ? 'border-white/10' : ''
-            } p-4`}
+            } p-2`}
           >
             <button
               type="button"
               onClick={toggleCollapsed}
-              className={`flex w-full items-center justify-center gap-2 rounded-2xl py-3 text-sm font-medium transition-colors ${
+              className={`flex w-full items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-medium transition-colors ${
                 theme === 'dark'
                   ? 'text-gray-300 hover:bg-white/10 hover:text-white'
                   : 'text-blue-950 hover:bg-gray-100'
@@ -305,10 +284,10 @@ export default function SidebarDrawer({
               aria-label={isCollapsedDesktop ? 'Expand sidebar' : 'Collapse sidebar'}
             >
               {isCollapsedDesktop ? (
-                <PanelLeftOpen size={20} strokeWidth={2} />
+                <PanelLeftOpen size={18} strokeWidth={2} />
               ) : (
                 <>
-                  <PanelLeftClose size={20} strokeWidth={2} />
+                  <PanelLeftClose size={18} strokeWidth={2} />
                   <span>Collapse Sidebar</span>
                 </>
               )}

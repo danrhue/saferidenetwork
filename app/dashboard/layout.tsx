@@ -64,7 +64,7 @@ function DashboardLayoutShell({
           {
             href: '/dashboard',
             label: 'Overview',
-            icon: <LayoutDashboard size={20} strokeWidth={2} />,
+            icon: <LayoutDashboard size={18} strokeWidth={2} />,
           },
         ],
       },
@@ -74,13 +74,13 @@ function DashboardLayoutShell({
           {
             href: '/dashboard/profile',
             label: 'My Profile',
-            icon: <User size={20} strokeWidth={2} />,
+            icon: <User size={18} strokeWidth={2} />,
             badge: `${profileCompletion}%`,
           },
           {
             href: '/dashboard/documents',
             label: 'My Documents',
-            icon: <FileText size={20} strokeWidth={2} />,
+            icon: <FileText size={18} strokeWidth={2} />,
             badge: `${documentsApproved}/${totalDocuments}`,
           },
         ],
@@ -91,22 +91,18 @@ function DashboardLayoutShell({
           {
             href: '/dashboard/trips',
             label: 'Browse Trips',
-            icon: <MapPin size={20} strokeWidth={2} />,
+            icon: <MapPin size={18} strokeWidth={2} />,
           },
           {
             href: '/dashboard/my-offers',
             label: 'My Offers',
-            icon: <ClipboardList size={20} strokeWidth={2} />,
-            description:
-              'Trips you have offered on. You will be notified if an organization assigns one to you.',
+            icon: <ClipboardList size={18} strokeWidth={2} />,
           },
           {
             href: '/dashboard/active-trips',
             label: 'Active Trips',
-            icon: <Navigation size={20} strokeWidth={2} />,
+            icon: <Navigation size={18} strokeWidth={2} />,
             matchPaths: ['/dashboard/trip'],
-            description:
-              'Trips you have been assigned to. Open the trip to start navigation and manage your route.',
           },
         ],
       },
@@ -116,17 +112,17 @@ function DashboardLayoutShell({
           {
             href: '/dashboard/payments',
             label: 'Payments',
-            icon: <CreditCard size={20} strokeWidth={2} />,
+            icon: <CreditCard size={18} strokeWidth={2} />,
           },
           {
             href: '/dashboard/ratings',
             label: 'My Ratings',
-            icon: <Star size={20} strokeWidth={2} />,
+            icon: <Star size={18} strokeWidth={2} />,
           },
           {
             href: '/dashboard/updates',
             label: 'Company Updates',
-            icon: <Bell size={20} strokeWidth={2} />,
+            icon: <Bell size={18} strokeWidth={2} />,
           },
         ],
       },
@@ -188,16 +184,16 @@ function DashboardLayoutShell({
 
   const sidebarFooter = (
     <>
-      <div className="mb-3 flex items-center gap-3 px-2">
+      <div className="mb-2 flex items-center gap-2 px-1">
         {profileAvatar}
         <div className="min-w-0">
-          <p className="truncate text-sm font-medium text-white">{user?.user_metadata?.full_name}</p>
-          <p className="truncate text-xs text-gray-400">{user?.email}</p>
+          <p className="truncate text-xs font-medium text-white">{user?.user_metadata?.full_name}</p>
+          <p className="truncate text-[11px] text-gray-400">{user?.email}</p>
         </div>
       </div>
       <button
         onClick={handleSignOut}
-        className="w-full rounded-xl py-3 text-center text-sm font-medium text-red-400 transition-colors hover:bg-white/10"
+        className="w-full rounded-lg py-2 text-center text-xs font-medium text-red-400 transition-colors hover:bg-white/10"
       >
         Sign Out
       </button>

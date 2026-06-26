@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import DriverEarningsPanel from '@/components/driver/DriverEarningsPanel';
 import DriverStripeConnectPanel from '@/components/driver/DriverStripeConnectPanel';
 import { authFetch } from '@/lib/auth-fetch';
 import { supabase } from '@/lib/supabase';
@@ -98,20 +99,32 @@ export default function DriverPaymentsPage() {
     profile?.stripe_payouts_enabled;
 
   return (
-    <div className="max-w-3xl">
-      <h1 className="text-3xl font-bold text-gray-900 mb-2">Payments</h1>
-      <p className="text-gray-600 mb-8">
-        Manage how you get paid for trips. This is separate from your profile setup and is not
-        required to reach 100% profile completion.
-      </p>
+    <div className="mx-auto max-w-5xl pb-12">
+      <div className="mb-8">
+        <h1 className="mb-2 text-3xl font-bold text-blue-950">Payments & Earnings</h1>
+        <p className="text-gray-600">
+          Track completed trip payouts and manage your Stripe Connect account. Stripe setup is
+          optional for profile completion but required to receive payouts.
+        </p>
+      </div>
 
-      <DriverStripeConnectPanel
-        isStripeConnected={!!isStripeConnected}
-        hasStripeAccount={!!profile?.stripe_account_id}
-        stripeConnecting={stripeConnecting}
-        stripeMessage={stripeMessage}
-        onConnectStripe={() => void handleConnectStripe()}
-      />
+      <div className="space-y-8">
+        <section>
+          <h2 className="mb-4 text-lg font-semibold text-blue-950">Earnings Overview</h2>
+          <DriverEarningsPanel />
+        </section>
+
+        <section>
+          <h2 className="mb-4 text-lg font-semibold text-blue-950">Payout Account</h2>
+          <DriverStripeConnectPanel
+            isStripeConnected={!!isStripeConnected}
+            hasStripeAccount={!!profile?.stripe_account_id}
+            stripeConnecting={stripeConnecting}
+            stripeMessage={stripeMessage}
+            onConnectStripe={() => void handleConnectStripe()}
+          />
+        </section>
+      </div>
     </div>
   );
 }
