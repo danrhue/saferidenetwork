@@ -8,7 +8,12 @@ import {
   formatAdminDateTime,
   formatAdminDriverName,
 } from '@/components/admin/admin-driver-utils';
-import type { AdminDriverDetail, AdminDriverDocument } from '@/lib/admin/driver-detail';
+import type {
+  AdminDriverAssignedTrip,
+  AdminDriverDetail,
+  AdminDriverDocument,
+} from '@/lib/admin/driver-detail';
+import { formatAdminTripPayout } from '@/lib/admin/driver-assigned-trips';
 import { getDocumentDisplayLabel, sortDocumentsForReview } from '@/lib/driver/document-display';
 import {
   profilePhotoStatusBadgeClass,
@@ -22,13 +27,29 @@ type AdminDriverDetailViewProps = {
   initialTab?: TabId;
 };
 
-type TabId = 'profile' | 'documents' | 'photo';
+type TabId = 'profile' | 'documents' | 'photo' | 'trips';
 
 const TABS: { id: TabId; label: string }[] = [
   { id: 'profile', label: 'Profile Info' },
   { id: 'documents', label: 'Documents' },
   { id: 'photo', label: 'Profile Photo' },
+  { id: 'trips', label: 'Assigned Trips' },
 ];
+
+function tripStatusClass(status: string): string {
+  if (status === 'completed') return 'bg-green-100 text-green-700';
+  if (status === 'cancelled') return 'bg-gray-100 text-gray-600';
+  if (status === 'in_progress') return 'bg-blue-100 text-blue-700';
+  if (status === 'assigned') return 'bg-indigo-100 text-indigo-700';
+  return 'bg-amber-100 text-amber-800';
+}
+
+function tripDetailHref(trip: AdminDriverAssignedTrip): string | null {
+  if (trip.status === 'assigned' || trip.status === 'in_progress') {
+    return `/admin/active-trips/${trip.id}`;
+  }
+  return null;
+}
 
 function documentStatusClass(status: string): string {
   if (status === 'approved') return 'bg-green-100 text-green-700';
@@ -128,7 +149,7 @@ export default function AdminDriverDetailView({
     );
   }
 
-  const { driver, documents, photoAudit } = detail;
+  const { driver, documents, photoAudit, assignedTrips } = detail;
   const driverName = formatAdminDriverName(driver);
   const photoStatus = (driver.profile_photo_status ?? null) as ProfilePhotoStatus | null;
 
@@ -175,9 +196,22 @@ export default function AdminDriverDetailView({
             }`}
           >
             {tab.label}
-            {tab.id === 'documents' && documents.length > 0 && (
-              <span className="ml-2 rounded-full bg-white/20 px-2 py-0.5 text-xs">
+            {tab.id === 'documents' && (
+              <span
+                className={`ml-2 rounded-full px-2 py-0.5 text-xs ${
+                  activeTab === tab.id ? 'bg-white/20' : 'bg-blue-100 text-blue-800'
+                }`}
+              >
                 {documents.length}
+              </span>
+            )}
+            {tab.id === 'trips' && (
+              <span
+                className={`ml-2 rounded-full px-2 py-0.5 text-xs ${
+                  activeTab === tab.id ? 'bg-white/20' : 'bg-blue-100 text-blue-800'
+                }`}
+              >
+                {assignedTrips.length}
               </span>
             )}
           </button>
@@ -481,6 +515,80 @@ export default function AdminDriverDetailView({
             >
               Open Profile Photo Review queue →
             </Link>
+          </div>
+        )}
+
+        {activeTab === 'trips' && (
+          <div>
+            {assignedTrips.length === 0 ? (
+              <p className="text-blue-700">No trips have been assigned to this driver yet.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[900px] text-sm">
+                  <thead>
+                    <tr className="border-b border-blue-100 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      <th className="pb-3 pr-4">Trip</th>
+                      <th className="pb-3 pr-4">Pickup</th>
+                      <th className="pb-3 pr-4">Route</th>
+                      <th className="pb-3 pr-4">Status</th>
+                      <th className="pb-3 pr-4">Payout</th>
+                      <th className="pb-3">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {assignedTrips.map((trip) => {
+                      const detailHref = tripDetailHref(trip);
+                      return (
+                        <tr key={trip.id} className="border-b border-blue-50 align-top">
+                          <td className="py-4 pr-4">
+                            <p className="font-medium text-blue-950">{trip.title}</p>
+                            <p className="mt-1 text-xs text-gray-500">{trip.organization_name}</p>
+                          </td>
+                          <td className="py-4 pr-4 whitespace-nowrap text-blue-950">
+                            {formatAdminDateTime(trip.pickup_time)}
+                          </td>
+                          <td className="py-4 pr-4">
+                            <p className="text-blue-950">
+                              {trip.pickup_area} → {trip.dropoff_area}
+                            </p>
+                            <p className="mt-1 text-xs text-gray-500">
+                              {trip.pickup_location} → {trip.dropoff_location}
+                            </p>
+                          </td>
+                          <td className="py-4 pr-4">
+                            <span
+                              className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium capitalize ${tripStatusClass(trip.status)}`}
+                            >
+                              {trip.status.replace(/_/g, ' ')}
+                            </span>
+                            {trip.driver_payout_status && (
+                              <p className="mt-1 text-xs capitalize text-gray-500">
+                                Payout: {trip.driver_payout_status.replace(/_/g, ' ')}
+                              </p>
+                            )}
+                          </td>
+                          <td className="py-4 pr-4 font-medium text-blue-950">
+                            {formatAdminTripPayout(trip.payout_amount)}
+                          </td>
+                          <td className="py-4">
+                            {detailHref ? (
+                              <Link
+                                href={detailHref}
+                                className="text-sm font-medium text-[#1E3A8A] hover:underline"
+                              >
+                                View live trip
+                              </Link>
+                            ) : (
+                              <span className="text-xs text-gray-400">—</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
       </div>

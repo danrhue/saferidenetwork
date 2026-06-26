@@ -137,6 +137,12 @@ export default function AdminDriversPage() {
                           >
                             Documents
                           </Link>
+                          <Link
+                            href={`/admin/drivers/${driver.id}?tab=trips`}
+                            className="text-sm font-medium text-[#1E3A8A] hover:underline"
+                          >
+                            Trips
+                          </Link>
                           {!showDeleted && (
                             <button
                               type="button"

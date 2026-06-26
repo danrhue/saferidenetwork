@@ -3,10 +3,10 @@
 import { useParams, useSearchParams } from 'next/navigation';
 import AdminDriverDetailView from '@/components/admin/AdminDriverDetailView';
 
-type TabId = 'profile' | 'documents' | 'photo';
+type TabId = 'profile' | 'documents' | 'photo' | 'trips';
 
 function parseInitialTab(value: string | null): TabId {
-  if (value === 'documents' || value === 'photo') return value;
+  if (value === 'documents' || value === 'photo' || value === 'trips') return value;
   return 'profile';
 }
 

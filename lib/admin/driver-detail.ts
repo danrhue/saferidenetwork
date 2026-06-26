@@ -2,8 +2,14 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { withSignedDocumentUrls } from '@/lib/driver-document-urls';
 import { enrichDriverProfiles, type DriverProfileRow } from '@/lib/driver-profile';
 import { autoRejectExpiredDocuments } from '@/lib/driver/document-expiration';
+import {
+  fetchAssignedTripsForDriver,
+  type AdminDriverAssignedTrip,
+} from '@/lib/admin/driver-assigned-trips';
 import { fetchProfilePhotoAuditHistory } from '@/lib/admin/profile-photo-review';
 import { resolveProfilePhotoUrl } from '@/lib/storage/profile-photos';
+
+export type { AdminDriverAssignedTrip };
 
 export type AdminDriverDocument = {
   id: string;
@@ -27,6 +33,7 @@ export type AdminDriverDetail = {
   };
   documents: AdminDriverDocument[];
   photoAudit: Awaited<ReturnType<typeof fetchProfilePhotoAuditHistory>>;
+  assignedTrips: AdminDriverAssignedTrip[];
 };
 
 export async function getAdminDriverDetail(
@@ -61,8 +68,11 @@ export async function getAdminDriverDetail(
     throw new Error(docsError.message);
   }
 
-  const signedDocuments = await withSignedDocumentUrls(admin, documents ?? []);
-  const photoAudit = await fetchProfilePhotoAuditHistory(admin, driverId);
+  const [signedDocuments, photoAudit, assignedTrips] = await Promise.all([
+    withSignedDocumentUrls(admin, documents ?? []),
+    fetchProfilePhotoAuditHistory(admin, driverId),
+    fetchAssignedTripsForDriver(admin, driverId),
+  ]);
 
   return {
     driver: {
@@ -71,5 +81,6 @@ export async function getAdminDriverDetail(
     },
     documents: signedDocuments,
     photoAudit,
+    assignedTrips,
   };
 }
