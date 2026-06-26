@@ -6,6 +6,10 @@ import DocumentCategorySection from '@/components/driver/DocumentCategorySection
 import DriverDocumentCard, {
   type DriverDocumentRecord,
 } from '@/components/driver/DriverDocumentCard';
+import {
+  countApprovedRequiredDocuments,
+  countUploadedRequiredDocuments,
+} from '@/lib/driver/document-completion';
 import { groupDocumentsByCategory } from '@/lib/driver/document-categories';
 import { findDriverDocument } from '@/lib/driver/required-documents';
 import { toDateInputValue } from '@/lib/driver/document-dates';
@@ -237,20 +241,16 @@ export default function DriverDocumentsPage() {
     }
   };
 
-  const approvedTypes = new Set(
-    documents.filter((d) => d.status === 'approved').map((d) => d.document_type)
-  );
-  const uploadedTypes = new Set(documents.map((d) => d.document_type));
   const totalRequired = requiredDocuments.length;
-  const approvedCount = approvedTypes.size;
-  const uploadedCount = uploadedTypes.size;
+  const approvedCount = countApprovedRequiredDocuments(documents, requiredDocuments);
+  const uploadedCount = countUploadedRequiredDocuments(documents, requiredDocuments);
   const progress =
     totalRequired > 0 ? Math.round((approvedCount / totalRequired) * 100) : 0;
 
   const groupedCategories = groupDocumentsByCategory(requiredDocuments);
 
-  const getCategoryApprovedCount = (types: string[]) =>
-    types.filter((type) => approvedTypes.has(type)).length;
+  const getCategoryApprovedCount = (categoryDocs: { type: string }[]) =>
+    countApprovedRequiredDocuments(documents, categoryDocs);
 
   if (requirementsLoading) {
     return (
@@ -319,7 +319,7 @@ export default function DriverDocumentsPage() {
           <DocumentCategorySection
             key={category.id}
             category={category}
-            approvedCount={getCategoryApprovedCount(category.documents.map((doc) => doc.type))}
+            approvedCount={getCategoryApprovedCount(category.documents)}
           >
             {category.documents.map((doc) => {
               const existing = findDriverDocument(documents, doc.type);

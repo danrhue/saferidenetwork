@@ -31,7 +31,7 @@ export type DocumentCategoryMeta = {
 export const DOCUMENT_CATEGORY_META: Record<DocumentCategoryId, DocumentCategoryMeta> = {
   licensing: {
     title: 'Licensing & Identification',
-    examples: "Driver's License, SSN Card, Birth Certificate / Passport",
+    examples: "Driver's License (Front & Back), SSN Card, Birth Certificate / Passport",
     description: 'Core ID documents',
   },
   vehicle: {
@@ -81,7 +81,8 @@ export type RequiredDocument = {
 
 /** Default document types seeded for every state (generic labels — no state names). */
 export const DEFAULT_DOCUMENT_TYPES = [
-  'drivers_license',
+  'drivers_license_front',
+  'drivers_license_back',
   'proof_of_insurance',
   'vehicle_registration',
   'vehicle_inspection',
@@ -102,16 +103,27 @@ export type DefaultDocumentType = (typeof DEFAULT_DOCUMENT_TYPES)[number];
 
 /** Master catalog — metadata for all possible driver documents. */
 export const DRIVER_DOCUMENT_CATALOG: Record<string, RequiredDocument> = {
-  drivers_license: {
-    type: 'drivers_license',
-    label: "Driver's License",
+  drivers_license_front: {
+    type: 'drivers_license_front',
+    label: "Driver's License — Front",
     category: 'licensing',
     cost: 'No cost',
     description:
-      "Upload a clear photo or scan of your current, valid driver's license (front and back if both sides are required). Enter the expiration date when uploading.",
+      "Upload a clear photo or scan of the front of your valid driver's license. Upload the front only — do not include the back in this file. Enter the license expiration date when uploading.",
     uploadable: true,
     requiresExpiration: true,
     validityYears: 4,
+    specialNote: 'Also upload the back as a separate file on the card below.',
+  },
+  drivers_license_back: {
+    type: 'drivers_license_back',
+    label: "Driver's License — Back",
+    category: 'licensing',
+    cost: 'No cost',
+    description:
+      "Upload a clear photo or scan of the back of your valid driver's license. Upload the back only — do not combine it with the front in one image.",
+    uploadable: true,
+    specialNote: 'Must be a separate upload from the front of your license.',
   },
   ssn_card: {
     type: 'ssn_card',

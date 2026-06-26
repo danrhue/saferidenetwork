@@ -8,6 +8,14 @@ import {
   type RequiredDocument,
 } from '@/lib/driver/document-catalog';
 import {
+  DRIVERS_LICENSE_BACK,
+  DRIVERS_LICENSE_DOCUMENT_TYPES,
+  DRIVERS_LICENSE_FRONT,
+  LEGACY_DRIVERS_LICENSE,
+  getPairedDriversLicenseType,
+  isDriversLicenseDocumentType,
+} from '@/lib/driver/drivers-license-documents';
+import {
   applyStateCatalogOverrides,
   getDefaultRequiredDocuments,
   resolveRequiredDocuments,
@@ -18,6 +26,11 @@ export {
   applyStateCatalogOverrides,
   DOCUMENT_CATEGORY_META,
   DOCUMENT_CATEGORY_ORDER,
+  DRIVERS_LICENSE_BACK,
+  DRIVERS_LICENSE_DOCUMENT_TYPES,
+  DRIVERS_LICENSE_FRONT,
+  getPairedDriversLicenseType,
+  isDriversLicenseDocumentType,
 };
 
 export function formatDocumentValidity(doc: RequiredDocument): string | null {

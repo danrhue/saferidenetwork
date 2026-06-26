@@ -1,7 +1,12 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
+import {
+  getDocumentDisplayLabel,
+  isDeprecatedDocumentType,
+  sortDocumentsForReview,
+} from '@/lib/driver/document-display';
 
 interface Driver {
   id: string;
@@ -170,6 +175,8 @@ export default function DocumentReviewPage() {
     }
   };
 
+  const sortedDocuments = useMemo(() => sortDocumentsForReview(documents), [documents]);
+
   return (
     <div>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-8">
@@ -260,11 +267,20 @@ export default function DocumentReviewPage() {
                 <p className="text-blue-700">This driver has not uploaded any documents yet.</p>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {documents.map((doc) => (
+                  {sortedDocuments.map((doc) => (
                     <div key={doc.id} className="border border-blue-50 rounded-xl p-4">
-                      <div className="flex justify-between items-start mb-3">
-                        <div className="font-medium capitalize text-blue-950">{doc.document_type.replace(/_/g, ' ')}</div>
-                        <span className={`text-xs px-2 py-1 rounded-full capitalize ${getStatusColor(doc.status)}`}>
+                      <div className="flex justify-between items-start gap-3 mb-3">
+                        <div>
+                          <div className="font-medium text-blue-950">
+                            {getDocumentDisplayLabel(doc.document_type)}
+                          </div>
+                          {isDeprecatedDocumentType(doc.document_type) && (
+                            <p className="mt-1 text-xs font-medium text-amber-700">
+                              Deprecated — driver must re-upload front and back separately.
+                            </p>
+                          )}
+                        </div>
+                        <span className={`shrink-0 text-xs px-2 py-1 rounded-full capitalize ${getStatusColor(doc.status)}`}>
                           {doc.status.replace(/_/g, ' ')}
                         </span>
                       </div>

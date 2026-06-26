@@ -4,6 +4,7 @@ import { createClient } from '@/utils/supabase/server';
 import { documentRequiresExpiration } from '@/lib/driver/required-documents';
 import { EXPIRED_DOCUMENT_REJECTION_REASON } from '@/lib/driver/document-expiration';
 import { dateInputToExpiresAt } from '@/lib/driver/document-dates';
+import { syncPairedDriversLicenseExpiry } from '@/lib/driver/sync-drivers-license-expiry';
 
 export async function uploadDriverDocument(formData: FormData) {
   try {
@@ -78,7 +79,15 @@ export async function uploadDriverDocument(formData: FormData) {
     }
 
     if (expiresAt) {
-      const expiryDate = new Date(dateInputToExpiresAt(expiresAt));
+      const expiresAtIso = dateInputToExpiresAt(expiresAt);
+      await syncPairedDriversLicenseExpiry(
+        supabase,
+        user.id,
+        documentType,
+        expiresAtIso
+      );
+
+      const expiryDate = new Date(expiresAtIso);
       if (expiryDate.getTime() < Date.now()) {
         await supabase
           .from('driver_documents')

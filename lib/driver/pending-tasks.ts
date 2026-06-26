@@ -1,5 +1,10 @@
 import { isDocumentExpired } from '@/lib/driver/document-expiration';
 import {
+  countApprovedRequiredDocuments,
+  countRequiredUploadSlots,
+  countUploadedRequiredDocuments,
+} from '@/lib/driver/document-completion';
+import {
   findDriverDocument,
   type RequiredDocument,
 } from '@/lib/driver/required-documents';
@@ -320,12 +325,6 @@ export function calculateDriverOverviewStats(
   requiredDocuments: RequiredDocument[]
 ): DriverOverviewStats {
   const uploadableRequired = requiredDocuments.filter((d) => d.uploadable);
-  const uploadedTypes = new Set(documents.map((d) => d.document_type));
-  const approvedTypes = new Set(
-    documents
-      .filter((d) => d.status === 'approved' && !isDocumentExpired(d.expires_at))
-      .map((d) => d.document_type)
-  );
 
   const pendingTasks = calculatePendingTasks(profile, documents, requiredDocuments);
   const documentsStillNeeded = uploadableRequired.filter((docDef) => {
@@ -349,9 +348,9 @@ export function calculateDriverOverviewStats(
   }
 
   return {
-    documentsUploaded: uploadedTypes.size,
-    documentsRequired: uploadableRequired.length,
-    documentsApproved: approvedTypes.size,
+    documentsUploaded: countUploadedRequiredDocuments(documents, requiredDocuments),
+    documentsRequired: countRequiredUploadSlots(requiredDocuments),
+    documentsApproved: countApprovedRequiredDocuments(documents, requiredDocuments),
     documentsPending: documentsStillNeeded,
     profileCompletion,
     pendingTaskCount: pendingTasks.length,

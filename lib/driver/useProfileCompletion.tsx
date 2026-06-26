@@ -15,6 +15,10 @@ import {
   type IncompleteOfferRequirement,
 } from '@/lib/driver/incomplete-requirements';
 import {
+  countApprovedRequiredDocuments,
+  countRequiredUploadSlots,
+} from '@/lib/driver/document-completion';
+import {
   buildDocumentCompletionContext,
   getDriverCompletionPercent,
   getIncompleteWizardSteps,
@@ -94,10 +98,6 @@ export function ProfileCompletionProvider({ children }: { children: ReactNode })
     }
 
     const ctx = buildDocumentCompletionContext(docs, required);
-    const approvedTypes = new Set(
-      docs.filter((d) => d.status === 'approved').map((d) => d.document_type)
-    ).size;
-
     const percent = getDriverCompletionPercent(profileData, ctx);
 
     setDocumentContext(ctx);
@@ -109,8 +109,8 @@ export function ProfileCompletionProvider({ children }: { children: ReactNode })
         driverDocuments: docs,
       })
     );
-    setDocumentsApproved(approvedTypes);
-    setTotalDocuments(required.length);
+    setDocumentsApproved(countApprovedRequiredDocuments(docs, required));
+    setTotalDocuments(countRequiredUploadSlots(required));
   }, []);
 
   useEffect(() => {

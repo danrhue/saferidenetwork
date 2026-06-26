@@ -1,4 +1,8 @@
 import {
+  countRequiredUploadSlots,
+  countUploadedRequiredDocuments,
+} from '@/lib/driver/document-completion';
+import {
   getWizardStepCompletionMap,
   isWizardStepComplete,
   WIZARD_STEP_COUNT,
@@ -17,6 +21,7 @@ export type DriverDocumentCompletionInput = {
 };
 
 export type RequiredDocumentCompletionInput = {
+  type: string;
   uploadable?: boolean;
 };
 
@@ -25,11 +30,9 @@ export function buildDocumentCompletionContext(
   docs: DriverDocumentCompletionInput[],
   required: RequiredDocumentCompletionInput[]
 ): WizardCompletionContext {
-  const uploadableRequired = required.filter((d) => d.uploadable).length;
-  const uploadedTypes = new Set(docs.map((d) => d.document_type)).size;
   return {
-    documentsUploaded: uploadedTypes,
-    documentsRequired: uploadableRequired,
+    documentsUploaded: countUploadedRequiredDocuments(docs, required),
+    documentsRequired: countRequiredUploadSlots(required),
   };
 }
 

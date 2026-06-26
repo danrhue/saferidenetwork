@@ -3,6 +3,7 @@ import { createClient } from '@/utils/supabase/server';
 import { getRequiredDocument } from '@/lib/driver/required-documents';
 import { dateInputToExpiresAt } from '@/lib/driver/document-dates';
 import { EXPIRED_DOCUMENT_REJECTION_REASON } from '@/lib/driver/document-expiration';
+import { syncPairedDriversLicenseExpiry } from '@/lib/driver/sync-drivers-license-expiry';
 
 export const dynamic = 'force-dynamic';
 
@@ -100,6 +101,13 @@ export async function POST(request: Request) {
     if (updateError) {
       return NextResponse.json({ error: updateError.message }, { status: 500 });
     }
+
+    await syncPairedDriversLicenseExpiry(
+      supabase,
+      user.id,
+      documentType,
+      dateInputToExpiresAt(expiresAt)
+    );
 
     return NextResponse.json({ success: true });
   } catch (err: unknown) {

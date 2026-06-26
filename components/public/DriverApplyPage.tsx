@@ -172,7 +172,7 @@ const checklistGroups = [
     phase: 'Start here',
     phaseColor: 'bg-[#1E3A8A] text-white',
     items: defaultDriverDocuments.filter((d) =>
-      ['drivers_license', 'proof_of_insurance', 'vehicle_registration', 'vehicle_inspection'].includes(d.type)
+      ['drivers_license_front', 'drivers_license_back', 'proof_of_insurance', 'vehicle_registration', 'vehicle_inspection'].includes(d.type)
     ),
   },
   {

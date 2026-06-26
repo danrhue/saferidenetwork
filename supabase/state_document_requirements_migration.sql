@@ -63,7 +63,8 @@ FROM (
 ) AS s(state_code)
 CROSS JOIN (
   VALUES
-    ('drivers_license', 10),
+    ('drivers_license_front', 10),
+    ('drivers_license_back', 11),
     ('proof_of_insurance', 20),
     ('vehicle_registration', 30),
     ('vehicle_inspection', 40),

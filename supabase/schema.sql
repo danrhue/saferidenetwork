@@ -11,7 +11,7 @@ create table public.profiles (
 create table public.documents (
   id uuid default gen_random_uuid() primary key,
   user_id uuid references auth.users not null,
-  document_type text not null,           -- e.g. 'drivers_license', 'insurance', 'vehicle_registration', 'cdl', etc.
+  document_type text not null,           -- e.g. 'drivers_license_front', 'proof_of_insurance', etc.
   file_path text not null,
   status text default 'pending',         -- pending, approved, rejected
   uploaded_at timestamptz default now(),
