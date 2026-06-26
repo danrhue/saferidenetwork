@@ -1,14 +1,24 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useCallback, useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { authFetch } from '@/lib/auth-fetch';
 import { suggestPassengerCapacity } from '@/lib/vehicle-capacity';
 import { getErrorMessage } from '@/lib/errors';
 import DriverOnboardingWizard from '@/components/driver/DriverOnboardingWizard';
 import { saveDriverPersonalProfile } from '@/lib/driver/profile-save';
+import { useProfileCompletion } from '@/lib/driver/useProfileCompletion';
 import { useRequiredDriverDocuments } from '@/lib/driver/useRequiredDriverDocuments';
+import {
+  persistOnboardingWizardStep,
+  type WizardStepSaveResult,
+} from '@/lib/driver/wizard-step-save';
+import {
+  WIZARD_PERSONAL_SAVE_STEPS,
+  clampWizardStep,
+  stepPersistsProgressOnly,
+} from '@/lib/driver/wizard-steps';
 import ProfilePhotoRejectionPanel from '@/components/driver/ProfilePhotoRejectionPanel';
 import {
   deleteDriverProfilePhoto,
@@ -33,6 +43,8 @@ export default function DriverProfile() {
   const [stripeConnecting, setStripeConnecting] = useState(false);
   const [stripeMessage, setStripeMessage] = useState<string | null>(null);
   const searchParams = useSearchParams();
+  const router = useRouter();
+  const { refresh: refreshProfileCompletion } = useProfileCompletion();
 
   // Vehicle & seating
   const [vehicleYear, setVehicleYear] = useState('');
@@ -44,6 +56,7 @@ export default function DriverProfile() {
   const [vehicleMessage, setVehicleMessage] = useState<string | null>(null);
   const [capacityTouched, setCapacityTouched] = useState(false);
   const [savingPersonal, setSavingPersonal] = useState(false);
+  const [savedWizardStep, setSavedWizardStep] = useState(1);
   const [documentsUploaded, setDocumentsUploaded] = useState(0);
   const {
     uploadableDocuments,
@@ -116,6 +129,13 @@ export default function DriverProfile() {
           };
 
       setProfile(profileData);
+      setSavedWizardStep(
+        clampWizardStep(
+          parseInt(searchParams.get('step') || '0', 10) ||
+            (prof?.onboarding_wizard_step as number | undefined) ||
+            1
+        )
+      );
 
       if (prof) {
         setVehicleYear(prof.vehicle_year ? String(prof.vehicle_year) : '');
@@ -173,6 +193,7 @@ export default function DriverProfile() {
         profile_photo_rejection_reason: null,
       }));
       setProfilePhotoUrl(photoUrl);
+      await refreshProfileCompletion();
       alert('Profile photo submitted for review!');
     } catch (e: any) {
       alert('Upload failed: ' + e.message);
@@ -275,13 +296,15 @@ export default function DriverProfile() {
     }));
   };
 
-  const savePersonalProfile = async () => {
-    if (!user || !profile) return;
+  const persistPersonalProfile = useCallback(async (): Promise<WizardStepSaveResult> => {
+    if (!user || !profile) {
+      return { ok: false, error: 'You must be signed in to save your profile.' };
+    }
+
     setSavingPersonal(true);
     try {
       const { error } = await saveDriverPersonalProfile(supabase, user.id, profile);
-
-      if (error) throw error;
+      if (error) return { ok: false, error: error.message };
 
       const firstName = String(profile.first_name ?? '').trim();
       const lastName = String(profile.last_name ?? '').trim();
@@ -291,41 +314,103 @@ export default function DriverProfile() {
         ...prev,
         full_name: fullName || prev.full_name,
       }));
-      alert('Profile saved successfully!');
-    } catch (e: unknown) {
-      alert('Error saving profile: ' + getErrorMessage(e));
+
+      return { ok: true };
     } finally {
       setSavingPersonal(false);
     }
-  };
+  }, [user, profile]);
+
+  const persistVehicleProfile = useCallback(
+    async (options?: { silent?: boolean }): Promise<WizardStepSaveResult> => {
+      setSavingVehicle(true);
+      if (!options?.silent) setVehicleMessage(null);
+      try {
+        const response = await authFetch('/api/driver/vehicle-profile', {
+          method: 'POST',
+          body: JSON.stringify({
+            vehicle_year: yearNum,
+            vehicle_make: vehicleMake,
+            vehicle_model: vehicleModel,
+            passenger_capacity: capacityNum,
+            seating_override_note: isCapacityOverride ? seatingOverrideNote : '',
+          }),
+        });
+        const data = await response.json();
+        if (!response.ok) {
+          return { ok: false, error: data.error || 'Failed to save vehicle information' };
+        }
+
+        setProfile((p: Record<string, unknown>) => ({ ...p, ...data.profile }));
+        if (!options?.silent) {
+          setVehicleMessage(
+            data.pendingApproval
+              ? 'Saved. Your seating override is pending admin approval — you cannot submit offers until approved.'
+              : 'Vehicle and seating capacity saved and approved.'
+          );
+        }
+        return { ok: true };
+      } catch (err: unknown) {
+        const message = getErrorMessage(err);
+        if (!options?.silent) setVehicleMessage(message);
+        return { ok: false, error: message };
+      } finally {
+        setSavingVehicle(false);
+      }
+    },
+    [
+      yearNum,
+      vehicleMake,
+      vehicleModel,
+      capacityNum,
+      isCapacityOverride,
+      seatingOverrideNote,
+    ]
+  );
+
+  const saveWizardStep = useCallback(
+    async (step: number): Promise<WizardStepSaveResult> => {
+      if (!user) {
+        return { ok: false, error: 'You must be signed in to save your profile.' };
+      }
+
+      let result: WizardStepSaveResult = { ok: true };
+
+      if (WIZARD_PERSONAL_SAVE_STEPS.has(step)) {
+        result = await persistPersonalProfile();
+      } else if (step === 8) {
+        result = await persistVehicleProfile({ silent: true });
+      } else if (!stepPersistsProgressOnly(step)) {
+        return { ok: true };
+      }
+
+      if (!result.ok) return result;
+
+      const stepPersist = await persistOnboardingWizardStep(supabase, user.id, step);
+      if (!stepPersist.ok) return stepPersist;
+
+      setSavedWizardStep(step);
+      await refreshProfileCompletion();
+      return { ok: true };
+    },
+    [user, persistPersonalProfile, persistVehicleProfile, refreshProfileCompletion]
+  );
+
+  const handleWizardStepAdvanced = useCallback(
+    (step: number) => {
+      const safe = clampWizardStep(step);
+      setSavedWizardStep(safe);
+      router.replace(`/dashboard/profile?step=${safe}`, { scroll: false });
+    },
+    [router]
+  );
 
   const saveVehicleProfile = async () => {
-    setSavingVehicle(true);
-    setVehicleMessage(null);
-    try {
-      const response = await authFetch('/api/driver/vehicle-profile', {
-        method: 'POST',
-        body: JSON.stringify({
-          vehicle_year: yearNum,
-          vehicle_make: vehicleMake,
-          vehicle_model: vehicleModel,
-          passenger_capacity: capacityNum,
-          seating_override_note: isCapacityOverride ? seatingOverrideNote : '',
-        }),
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Save failed');
-
-      setProfile((p: Record<string, unknown>) => ({ ...p, ...data.profile }));
-      setVehicleMessage(
-        data.pendingApproval
-          ? 'Saved. Your seating override is pending admin approval — you cannot submit offers until approved.'
-          : 'Vehicle and seating capacity saved and approved.'
-      );
-    } catch (err: unknown) {
-      setVehicleMessage(getErrorMessage(err));
-    } finally {
-      setSavingVehicle(false);
+    const result = await persistVehicleProfile();
+    if (result.ok && user) {
+      await persistOnboardingWizardStep(supabase, user.id, 8);
+      setSavedWizardStep(8);
+      await refreshProfileCompletion();
     }
   };
 
@@ -369,21 +454,23 @@ export default function DriverProfile() {
         </div>
       ) : (
         <DriverOnboardingWizard
-          initialStep={Math.min(
-            Math.max(parseInt(searchParams.get('step') || '1', 10) || 1, 1),
-            10
-          )}
+          initialStep={savedWizardStep}
           onDrivingStatesSaved={async (result) => {
             setProfile((p: Record<string, unknown>) => ({
               ...p,
               driving_states: result.drivingStates,
             }));
             await refreshRequiredDocuments();
+            if (user) {
+              await persistOnboardingWizardStep(supabase, user.id, 2);
+              setSavedWizardStep(2);
+            }
+            await refreshProfileCompletion();
           }}
           profile={profile ?? {}}
           onChange={handlePersonalChange}
-          onSaveProfile={savePersonalProfile}
-          savingProfile={savingPersonal}
+          onSaveStep={saveWizardStep}
+          onStepAdvanced={handleWizardStepAdvanced}
           profilePhotoUrl={profilePhotoUrl}
           uploadingProfile={uploadingProfile}
           onUploadProfilePhoto={uploadProfilePhoto}

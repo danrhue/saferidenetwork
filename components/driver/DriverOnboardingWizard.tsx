@@ -6,39 +6,18 @@ import OperatingStatesStep, {
   type OperatingStatesSaveResult,
 } from '@/components/driver/OperatingStatesStep';
 import { calculateDriverCompletion } from '@/lib/driver/onboarding-completion';
+import type { WizardStepSaveResult } from '@/lib/driver/wizard-step-save';
+import {
+  WIZARD_MAILING_FIELDS,
+  WIZARD_STEP_FIELDS,
+  WIZARD_STEPS,
+  clampWizardStep,
+} from '@/lib/driver/wizard-steps';
 import { normalizeStateCodes } from '@/lib/driver/us-states';
 import type { CapacitySuggestion } from '@/lib/vehicle-capacity';
 import ProfilePhotoUpload from '@/components/driver/ProfilePhotoUpload';
 
 export type PersonalProfile = Record<string, unknown>;
-
-const STEPS = [
-  { id: 1, title: 'Personal Info' },
-  { id: 2, title: 'Operating States' },
-  { id: 3, title: 'Addresses' },
-  { id: 4, title: "Driver's License" },
-  { id: 5, title: 'Personal Details' },
-  { id: 6, title: 'Emergency Contact' },
-  { id: 7, title: 'Profile Photo' },
-  { id: 8, title: 'Vehicle & Seating' },
-  { id: 9, title: 'Payment Setup' },
-  { id: 10, title: 'Documents' },
-] as const;
-
-const STEP_FIELDS: Record<number, string[]> = {
-  1: ['first_name', 'last_name', 'email', 'phone'],
-  3: ['physical_address_line1', 'physical_city', 'physical_state', 'physical_postal_code'],
-  4: ['drivers_license_number', 'drivers_license_state'],
-  5: ['dob_month', 'dob_day', 'dob_year', 'ssn'],
-  6: ['emergency_contact_first_name', 'emergency_contact_last_name', 'emergency_contact_phone'],
-};
-
-const MAILING_FIELDS = [
-  'mailing_address_line1',
-  'mailing_city',
-  'mailing_state',
-  'mailing_postal_code',
-];
 
 function numValue(value: unknown): string | number {
   if (value == null || value === '') return '';
@@ -57,8 +36,10 @@ function hasValue(profile: PersonalProfile, field: string): boolean {
 export type DriverOnboardingWizardProps = {
   profile: PersonalProfile;
   onChange: (field: string, value: unknown) => void;
-  onSaveProfile: () => Promise<void>;
-  savingProfile: boolean;
+  /** Persist current step data before advancing. Return { ok: false } to stay on step. */
+  onSaveStep: (step: number) => Promise<WizardStepSaveResult>;
+  /** Called after a successful save + step advance (URL sync, sidebar refresh, etc.). */
+  onStepAdvanced?: (step: number) => void | Promise<void>;
   profilePhotoUrl: string | null;
   uploadingProfile: boolean;
   onUploadProfilePhoto: (file: File) => void;
@@ -98,8 +79,8 @@ export default function DriverOnboardingWizard(props: DriverOnboardingWizardProp
   const {
     profile,
     onChange,
-    onSaveProfile,
-    savingProfile,
+    onSaveStep,
+    onStepAdvanced,
     profilePhotoUrl,
     uploadingProfile,
     onUploadProfilePhoto,
@@ -135,10 +116,11 @@ export default function DriverOnboardingWizard(props: DriverOnboardingWizardProp
     onDrivingStatesSaved,
   } = props;
 
-  const [currentStep, setCurrentStep] = useState(
-    Math.min(Math.max(initialStep, 1), STEPS.length)
-  );
+  const [currentStep, setCurrentStep] = useState(clampWizardStep(initialStep));
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [stepSaving, setStepSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
 
   const completionProfile = useMemo(
     () => ({
@@ -180,10 +162,24 @@ export default function DriverOnboardingWizard(props: DriverOnboardingWizardProp
           'Select at least one operating state, then click Save Operating States.';
       }
       setErrors(newErrors);
-      return states.length > 0;
+      return states.length === 0 ? false : true;
     }
 
-    (STEP_FIELDS[step] || []).forEach((field) => {
+    if (step === 8) {
+      if (!vehicleYear?.trim()) newErrors.vehicle_year = 'Vehicle year is required';
+      if (!vehicleMake?.trim()) newErrors.vehicle_make = 'Vehicle make is required';
+      if (!vehicleModel?.trim()) newErrors.vehicle_model = 'Vehicle model is required';
+      if (!passengerCapacity?.trim()) {
+        newErrors.passenger_capacity = 'Passenger capacity is required';
+      }
+      if (isCapacityOverride && !seatingOverrideNote?.trim()) {
+        newErrors.seating_override_note = 'Explain your seating override before continuing';
+      }
+      setErrors(newErrors);
+      return Object.keys(newErrors).length === 0;
+    }
+
+    (WIZARD_STEP_FIELDS[step] || []).forEach((field) => {
       if (!hasValue(profile, field)) {
         newErrors[field] = 'This field is required';
       }
@@ -197,7 +193,7 @@ export default function DriverOnboardingWizard(props: DriverOnboardingWizardProp
     }
 
     if (step === 3 && profile.mailing_same_as_physical === false) {
-      MAILING_FIELDS.forEach((field) => {
+      WIZARD_MAILING_FIELDS.forEach((field) => {
         if (!hasValue(profile, field)) {
           newErrors[field] = 'This field is required';
         }
@@ -208,25 +204,100 @@ export default function DriverOnboardingWizard(props: DriverOnboardingWizardProp
     return Object.keys(newErrors).length === 0;
   };
 
-  const nextStep = async () => {
-    if (!validateStep()) return;
+  const advanceToStep = async (next: number) => {
+    setCurrentStep(next);
+    setSaveSuccess('Progress saved.');
+    await onStepAdvanced?.(next);
+  };
 
-    if (currentStep === 6) {
-      await onSaveProfile();
+  const handleValidationFailure = () => {
+    if (currentStep === 8) {
+      setSaveError('Please complete all required vehicle fields before continuing.');
+    }
+  };
+
+  const nextStep = async () => {
+    setSaveError(null);
+    setSaveSuccess(null);
+    if (!validateStep()) {
+      handleValidationFailure();
+      return;
     }
 
-    if (currentStep < STEPS.length) {
-      setCurrentStep(currentStep + 1);
+    setStepSaving(true);
+    try {
+      const result = await onSaveStep(currentStep);
+      if (!result.ok) {
+        setSaveError(result.error);
+        return;
+      }
+
+      if (currentStep < WIZARD_STEPS.length) {
+        await advanceToStep(currentStep + 1);
+      }
+    } finally {
+      setStepSaving(false);
+    }
+  };
+
+  const goToStep = async (targetStep: number) => {
+    if (targetStep === currentStep || stepSaving) return;
+
+    if (targetStep < currentStep) {
+      setSaveError(null);
+      setSaveSuccess(null);
+      setCurrentStep(targetStep);
+      void onStepAdvanced?.(targetStep);
+      return;
+    }
+
+    setSaveError(null);
+    setSaveSuccess(null);
+    if (!validateStep()) {
+      handleValidationFailure();
+      return;
+    }
+
+    setStepSaving(true);
+    try {
+      const result = await onSaveStep(currentStep);
+      if (!result.ok) {
+        setSaveError(result.error);
+        return;
+      }
+      setCurrentStep(targetStep);
+      setSaveSuccess('Progress saved.');
+      await onStepAdvanced?.(targetStep);
+    } finally {
+      setStepSaving(false);
     }
   };
 
   const prevStep = () => {
-    if (currentStep > 1) setCurrentStep(currentStep - 1);
+    if (currentStep > 1) {
+      setSaveError(null);
+      setSaveSuccess(null);
+      const prev = currentStep - 1;
+      setCurrentStep(prev);
+      void onStepAdvanced?.(prev);
+    }
   };
 
   const finishOnboarding = async () => {
-    await onSaveProfile();
-    alert('Onboarding progress saved! Complete any remaining steps to activate your account.');
+    setSaveError(null);
+    setSaveSuccess(null);
+    setStepSaving(true);
+    try {
+      const result = await onSaveStep(currentStep);
+      if (!result.ok) {
+        setSaveError(result.error);
+        return;
+      }
+      setSaveSuccess('Onboarding progress saved. Complete any remaining steps to activate your account.');
+      await onStepAdvanced?.(currentStep);
+    } finally {
+      setStepSaving(false);
+    }
   };
 
   return (
@@ -250,11 +321,12 @@ export default function DriverOnboardingWizard(props: DriverOnboardingWizardProp
       </div>
 
       <div className="flex justify-between mb-12 overflow-x-auto pb-4 gap-2">
-        {STEPS.map((step) => (
+        {WIZARD_STEPS.map((step) => (
           <button
             key={step.id}
             type="button"
-            onClick={() => setCurrentStep(step.id)}
+            onClick={() => void goToStep(step.id)}
+            disabled={stepSaving}
             className={`flex flex-col items-center min-w-[72px] sm:min-w-[90px] shrink-0 ${
               currentStep === step.id ? 'text-[#1E3A8A]' : 'text-gray-400'
             }`}
@@ -368,33 +440,52 @@ export default function DriverOnboardingWizard(props: DriverOnboardingWizardProp
         )}
       </div>
 
-      <div className="flex justify-between mt-10">
+      {(saveError || saveSuccess) && (
+        <div className="mt-8 space-y-2">
+          {saveError && (
+            <div
+              className="p-4 bg-red-50 border border-red-200 rounded-xl text-sm text-red-800"
+              role="alert"
+            >
+              <strong>Could not save this step.</strong> {saveError} Your entries are still on this
+              page — fix the issue and try again.
+            </div>
+          )}
+          {saveSuccess && !saveError && (
+            <div className="p-3 bg-green-50 border border-green-200 rounded-xl text-sm text-green-800">
+              {saveSuccess}
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="flex justify-between mt-6">
         <button
           type="button"
           onClick={prevStep}
-          disabled={currentStep === 1}
+          disabled={currentStep === 1 || stepSaving}
           className="px-10 py-4 border border-gray-300 rounded-2xl text-blue-950 disabled:opacity-40 hover:bg-gray-50"
         >
           Previous
         </button>
 
-        {currentStep < STEPS.length ? (
+        {currentStep < WIZARD_STEPS.length ? (
           <button
             type="button"
-            onClick={nextStep}
-            disabled={currentStep === 6 && savingProfile}
-            className="px-12 py-4 bg-[#1E3A8A] text-white rounded-2xl hover:bg-[#162d6b] disabled:opacity-70"
+            onClick={() => void nextStep()}
+            disabled={stepSaving}
+            className="px-12 py-4 bg-[#1E3A8A] text-white rounded-2xl hover:bg-[#162d6b] disabled:opacity-70 min-w-[160px]"
           >
-            {currentStep === 6 && savingProfile ? 'Saving...' : 'Next Step →'}
+            {stepSaving ? 'Saving…' : 'Next Step →'}
           </button>
         ) : (
           <button
             type="button"
-            onClick={finishOnboarding}
-            disabled={savingProfile}
-            className="px-12 py-4 bg-green-600 text-white rounded-2xl hover:bg-green-700 disabled:opacity-70"
+            onClick={() => void finishOnboarding()}
+            disabled={stepSaving}
+            className="px-12 py-4 bg-green-600 text-white rounded-2xl hover:bg-green-700 disabled:opacity-70 min-w-[160px]"
           >
-            {savingProfile ? 'Saving...' : 'Finish Onboarding'}
+            {stepSaving ? 'Saving…' : 'Finish Onboarding'}
           </button>
         )}
       </div>
