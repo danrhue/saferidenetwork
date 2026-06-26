@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useProfileCompletion } from '@/lib/driver/useProfileCompletion';
 import { useRouter, usePathname } from 'next/navigation';
-import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import { resolveProfilePhotoForProfile } from '@/lib/storage/profile-photos';
 import { enforceActiveAccount } from '@/lib/account-status';
@@ -208,26 +207,6 @@ function DashboardLayoutShell({
 
   return (
     <div className="flex h-screen flex-col bg-gray-50">
-      <div className="border-b bg-white px-4 py-2 text-sm sm:px-6">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-2">
-          <div className="hidden items-center gap-4 text-blue-900 sm:flex md:gap-6">
-            <Link href="/" className="font-medium transition hover:text-[#1E3A8A]">
-              Home
-            </Link>
-            <Link href="/apply-to-drive" className="font-medium transition hover:text-[#1E3A8A]">
-              Apply to Drive
-            </Link>
-            <Link href="/sign-up?role=driver" className="font-medium transition hover:text-[#1E3A8A]">
-              Refer a Driver
-            </Link>
-          </div>
-          <Link href="/" className="font-medium text-blue-900 sm:hidden">
-            ← Home
-          </Link>
-          <div className="text-xs font-semibold text-[#1E3A8A]">Driver Portal</div>
-        </div>
-      </div>
-
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <SidebarDrawer
           isOpen={menuOpen}
