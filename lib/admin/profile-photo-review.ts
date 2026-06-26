@@ -1,4 +1,5 @@
 import type { PostgrestError, SupabaseClient } from '@supabase/supabase-js';
+import { fetchAuthEmailsByUserIds } from '@/lib/admin/auth-user-email';
 import { getErrorMessage } from '@/lib/errors';
 import { resolveAdminProfilePhotoUrl } from '@/lib/storage/profile-photos';
 
@@ -9,9 +10,26 @@ export type ProfilePhotoReviewResult = {
   failed: { profileId: string; error: string }[];
 };
 
-/** Columns required for the review list — avoids optional migration-only fields. */
+/** Email lives in auth.users — never select profiles.email. */
+const PROFILE_PHOTO_ADMIN_VIEW = 'driver_profile_photos_admin_view';
+
 const PROFILE_PHOTO_LIST_SELECT =
-  'id, full_name, phone, email, profile_photo_url, profile_photo_status, profile_photo_rejection_reason, updated_at';
+  'id, full_name, phone, email, profile_photo_url, profile_photo_status, profile_photo_rejection_reason, updated_at, deleted_at';
+
+const PROFILE_PHOTO_PROFILES_SELECT =
+  'id, full_name, phone, profile_photo_url, profile_photo_status, profile_photo_rejection_reason, updated_at';
+
+type ProfilePhotoListRow = {
+  id: string;
+  full_name: string | null;
+  phone: string | null;
+  email?: string | null;
+  profile_photo_url: string | null;
+  profile_photo_status: string | null;
+  profile_photo_rejection_reason: string | null;
+  updated_at: string | null;
+  deleted_at?: string | null;
+};
 
 function isMissingColumnError(message: string): boolean {
   const lower = message.toLowerCase();
@@ -225,16 +243,20 @@ export type ProfilePhotoListFilters = {
 function buildProfilePhotoListQuery(
   admin: SupabaseClient,
   filters: ProfilePhotoListFilters,
-  options?: { excludeDeleted?: boolean }
+  options?: { excludeDeleted?: boolean; source?: 'view' | 'profiles' }
 ) {
   const status = filters.status ?? 'pending';
+  const source = options?.source ?? 'view';
 
   let query = admin
-    .from('profiles')
-    .select(PROFILE_PHOTO_LIST_SELECT)
-    .eq('role', 'driver')
+    .from(source === 'view' ? PROFILE_PHOTO_ADMIN_VIEW : 'profiles')
+    .select(source === 'view' ? PROFILE_PHOTO_LIST_SELECT : PROFILE_PHOTO_PROFILES_SELECT)
     .not('profile_photo_url', 'is', null)
     .order('updated_at', { ascending: false });
+
+  if (source === 'profiles') {
+    query = query.eq('role', 'driver');
+  }
 
   if (options?.excludeDeleted !== false) {
     query = query.is('deleted_at', null);
@@ -262,17 +284,27 @@ function buildProfilePhotoListQuery(
   return query;
 }
 
-export async function listDriverProfilePhotos(
+async function loadProfilePhotoRows(
   admin: SupabaseClient,
-  filters: ProfilePhotoListFilters = {}
-) {
-  let { data, error } = await buildProfilePhotoListQuery(admin, filters);
+  filters: ProfilePhotoListFilters
+): Promise<ProfilePhotoListRow[]> {
+  let source: 'view' | 'profiles' = 'view';
+  let { data, error } = await buildProfilePhotoListQuery(admin, filters, { source });
+
+  if (error && isMissingRelationError(error.message)) {
+    console.warn(
+      `[profile-photo-review] ${PROFILE_PHOTO_ADMIN_VIEW} not found; falling back to profiles + auth.users lookup. Run driver_profile_photos_admin_view.sql.`
+    );
+    source = 'profiles';
+    ({ data, error } = await buildProfilePhotoListQuery(admin, filters, { source }));
+  }
 
   if (error && isMissingColumnError(error.message) && error.message.includes('deleted_at')) {
     console.warn(
       '[profile-photo-review] deleted_at column missing; listing without soft-delete filter.'
     );
     ({ data, error } = await buildProfilePhotoListQuery(admin, filters, {
+      source,
       excludeDeleted: false,
     }));
   }
@@ -281,7 +313,27 @@ export async function listDriverProfilePhotos(
     throwQueryError('Profile photo list query failed', error);
   }
 
-  const rows = data ?? [];
+  const rows = (data ?? []) as unknown as ProfilePhotoListRow[];
+
+  if (source === 'profiles') {
+    const emailById = await fetchAuthEmailsByUserIds(
+      admin,
+      rows.map((row) => row.id)
+    );
+    return rows.map((row) => ({
+      ...row,
+      email: emailById[row.id] ?? null,
+    }));
+  }
+
+  return rows;
+}
+
+export async function listDriverProfilePhotos(
+  admin: SupabaseClient,
+  filters: ProfilePhotoListFilters = {}
+) {
+  const rows = await loadProfilePhotoRows(admin, filters);
   const auditByProfile = await fetchLatestAuditByProfileIds(
     admin,
     rows.map((r) => r.id)
@@ -289,7 +341,14 @@ export async function listDriverProfilePhotos(
 
   return Promise.all(
     rows.map(async (row) => ({
-      ...row,
+      id: row.id,
+      full_name: row.full_name,
+      phone: row.phone,
+      email: row.email ?? null,
+      profile_photo_url: row.profile_photo_url,
+      profile_photo_status: row.profile_photo_status,
+      profile_photo_rejection_reason: row.profile_photo_rejection_reason,
+      updated_at: row.updated_at,
       photo_url: await resolveAdminProfilePhotoUrl(admin, row.profile_photo_url),
       last_audit: auditByProfile[row.id] ?? null,
     }))
