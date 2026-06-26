@@ -46,7 +46,7 @@ export default function BrowseTrips() {
   const {
     profileCompletion,
     isProfileComplete,
-    incompleteSteps,
+    incompleteRequirements,
     refresh: refreshProfileCompletion,
   } = useProfileCompletion();
   const [trips, setTrips] = useState<Trip[]>([]);
@@ -371,7 +371,7 @@ export default function BrowseTrips() {
         <div className="mb-6">
           <ProfileCompletionOfferGate
             profileCompletion={profileCompletion}
-            incompleteSteps={incompleteSteps}
+            incompleteRequirements={incompleteRequirements}
           />
         </div>
       )}
@@ -667,7 +667,7 @@ export default function BrowseTrips() {
               ) : !isProfileComplete ? (
                 <ProfileCompletionOfferGate
                   profileCompletion={profileCompletion}
-                  incompleteSteps={incompleteSteps}
+                  incompleteRequirements={incompleteRequirements}
                   compact
                 />
               ) : (

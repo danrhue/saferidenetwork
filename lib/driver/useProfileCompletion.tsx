@@ -11,6 +11,10 @@ import {
 } from 'react';
 import { supabase } from '@/lib/supabase';
 import {
+  getIncompleteOfferRequirements,
+  type IncompleteOfferRequirement,
+} from '@/lib/driver/incomplete-requirements';
+import {
   buildDocumentCompletionContext,
   getDriverCompletionPercent,
   getIncompleteWizardSteps,
@@ -23,6 +27,7 @@ type ProfileCompletionContextValue = {
   profileCompletion: number;
   isProfileComplete: boolean;
   incompleteSteps: IncompleteWizardStep[];
+  incompleteRequirements: IncompleteOfferRequirement[];
   documentsApproved: number;
   totalDocuments: number;
   documentContext: WizardCompletionContext;
@@ -42,6 +47,9 @@ export function ProfileCompletionProvider({ children }: { children: ReactNode })
     documentsRequired: 0,
   });
   const [incompleteSteps, setIncompleteSteps] = useState<IncompleteWizardStep[]>([]);
+  const [incompleteRequirements, setIncompleteRequirements] = useState<
+    IncompleteOfferRequirement[]
+  >([]);
 
   const refresh = useCallback(async () => {
     const {
@@ -95,6 +103,12 @@ export function ProfileCompletionProvider({ children }: { children: ReactNode })
     setDocumentContext(ctx);
     setProfileCompletion(percent);
     setIncompleteSteps(getIncompleteWizardSteps(profileData, ctx));
+    setIncompleteRequirements(
+      getIncompleteOfferRequirements(profileData, ctx, {
+        requiredDocuments: required,
+        driverDocuments: docs,
+      })
+    );
     setDocumentsApproved(approvedTypes);
     setTotalDocuments(required.length);
   }, []);
@@ -108,6 +122,7 @@ export function ProfileCompletionProvider({ children }: { children: ReactNode })
       profileCompletion,
       isProfileComplete: profileCompletion === 100,
       incompleteSteps,
+      incompleteRequirements,
       documentsApproved,
       totalDocuments,
       documentContext,
@@ -116,6 +131,7 @@ export function ProfileCompletionProvider({ children }: { children: ReactNode })
     [
       profileCompletion,
       incompleteSteps,
+      incompleteRequirements,
       documentsApproved,
       totalDocuments,
       documentContext,
