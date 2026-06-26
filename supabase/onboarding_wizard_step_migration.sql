@@ -16,4 +16,4 @@ EXCEPTION
   WHEN duplicate_object THEN NULL;
 END $$;
 
-COMMENT ON COLUMN public.profiles.onboarding_wizard_step IS 'Last completed or visited step in the 10-step driver profile wizard (1-10)';
+COMMENT ON COLUMN public.profiles.onboarding_wizard_step IS 'Last step the driver was on in the 10-step profile wizard (1-10); used to resume progress';

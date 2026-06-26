@@ -19,11 +19,34 @@ export type WizardStepId = (typeof WIZARD_STEPS)[number]['id'];
 
 /** Fields validated (and saved via personal profile) per step. */
 export const WIZARD_STEP_FIELDS: Record<number, string[]> = {
-  1: ['first_name', 'last_name', 'email', 'phone'],
+  1: ['first_name', 'last_name', 'email', 'phone', 'phone_type'],
   3: ['physical_address_line1', 'physical_city', 'physical_state', 'physical_postal_code'],
-  4: ['drivers_license_number', 'drivers_license_state'],
-  5: ['dob_month', 'dob_day', 'dob_year', 'ssn'],
-  6: ['emergency_contact_first_name', 'emergency_contact_last_name', 'emergency_contact_phone'],
+  4: [
+    'drivers_license_number',
+    'drivers_license_state',
+    'drivers_license_exp_month',
+    'drivers_license_exp_day',
+    'drivers_license_exp_year',
+  ],
+  5: [
+    'dob_month',
+    'dob_day',
+    'dob_year',
+    'ssn',
+    'hair_color',
+    'eye_color',
+    'height_feet',
+    'height_inches',
+    'weight_lbs',
+    'gender',
+  ],
+  6: [
+    'emergency_contact_first_name',
+    'emergency_contact_last_name',
+    'emergency_contact_phone',
+    'emergency_contact_phone_type',
+    'emergency_contact_relation',
+  ],
 };
 
 export const WIZARD_MAILING_FIELDS = [
@@ -47,4 +70,18 @@ export function stepRequiresDataSave(step: number): boolean {
 /** Steps that only persist the wizard step index (no field payload). */
 export function stepPersistsProgressOnly(step: number): boolean {
   return step === 9 || step === 10;
+}
+
+/** Resolve the wizard step to show on load (URL param takes priority over DB). */
+export function resolveInitialWizardStep(
+  urlStepParam: string | null,
+  dbStep: number | null | undefined
+): number {
+  if (urlStepParam) {
+    const parsed = parseInt(urlStepParam, 10);
+    if (Number.isFinite(parsed) && parsed >= 1) {
+      return clampWizardStep(parsed);
+    }
+  }
+  return clampWizardStep(dbStep ?? 1);
 }

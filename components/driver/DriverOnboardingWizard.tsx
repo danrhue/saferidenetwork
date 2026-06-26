@@ -2,19 +2,37 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import {
-  InputHTMLAttributes,
-  useCallback,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import OperatingStatesStep, {
   type OperatingStatesSaveResult,
   type OperatingStatesStepHandle,
 } from '@/components/driver/OperatingStatesStep';
+import {
+  DateOfBirthFields,
+  FormInput,
+  FormSelect,
+  SsnFields,
+  UsStateSelect,
+  useDateOfBirthOptions,
+} from '@/components/driver/WizardFormFields';
 import { useRegisterWizardLeaveGuard } from '@/components/driver/WizardLeaveGuard';
 import { calculateDriverCompletion } from '@/lib/driver/onboarding-completion';
+import {
+  GENDER_OPTIONS,
+  HAIR_COLOR_OPTIONS,
+  EYE_COLOR_OPTIONS,
+  HEIGHT_FEET_OPTIONS,
+  HEIGHT_INCHES_OPTIONS,
+  MONTH_OPTIONS,
+  PASSENGER_CAPACITY_OPTIONS,
+  PHONE_TYPE_OPTIONS,
+  getBirthYearOptions,
+  getLicenseExpirationYearOptions,
+  getVehicleYearOptions,
+  reconcileDayAfterMonthYearChange,
+  selectValue,
+} from '@/lib/driver/wizard-form-options';
+import { validatePersonalDetailsStep } from '@/lib/driver/wizard-step-validation';
 import type { WizardStepSaveResult } from '@/lib/driver/wizard-step-save';
 import {
   WIZARD_MAILING_FIELDS,
@@ -50,7 +68,10 @@ export type DriverOnboardingWizardProps = {
   profile: PersonalProfile;
   onChange: (field: string, value: unknown) => void;
   /** Persist current step data before advancing. Return { ok: false } to stay on step. */
-  onSaveStep: (step: number) => Promise<WizardStepSaveResult>;
+  onSaveStep: (
+    step: number,
+    options?: { resumeStep?: number }
+  ) => Promise<WizardStepSaveResult>;
   /** Called after a successful save + step advance (URL sync, sidebar refresh, etc.). */
   onStepAdvanced?: (step: number) => void | Promise<void>;
   profilePhotoUrl: string | null;
@@ -140,6 +161,7 @@ export default function DriverOnboardingWizard(props: DriverOnboardingWizardProp
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [operatingStatesDirty, setOperatingStatesDirty] = useState(false);
+  const [ssnVerify, setSsnVerify] = useState('');
 
   const hasUnsavedChangesOnStep =
     hasUnsavedChanges || (currentStep === 2 && operatingStatesDirty);
@@ -166,11 +188,32 @@ export default function DriverOnboardingWizard(props: DriverOnboardingWizardProp
     documentsRequired,
   });
 
+  useEffect(() => {
+    setCurrentStep(clampWizardStep(initialStep));
+  }, [initialStep]);
+
+  useEffect(() => {
+    if (currentStep !== 5) {
+      setSsnVerify('');
+    }
+  }, [currentStep]);
+
   const handleChange = (field: string, value: unknown) => {
     onChange(field, value);
     setHasUnsavedChanges(true);
     if (errors[field]) {
       setErrors((prev) => ({ ...prev, [field]: '' }));
+    }
+    if (field === 'ssn' && errors.ssn_verify) {
+      setErrors((prev) => ({ ...prev, ssn_verify: '' }));
+    }
+  };
+
+  const handleSsnVerifyChange = (value: string) => {
+    setSsnVerify(value);
+    setHasUnsavedChanges(true);
+    if (errors.ssn_verify) {
+      setErrors((prev) => ({ ...prev, ssn_verify: '' }));
     }
   };
 
@@ -225,11 +268,30 @@ export default function DriverOnboardingWizard(props: DriverOnboardingWizardProp
       return Object.keys(newErrors).length === 0;
     }
 
-    (WIZARD_STEP_FIELDS[step] || []).forEach((field) => {
-      if (!hasValue(profile, field)) {
-        newErrors[field] = 'This field is required';
+    if (step === 5) {
+      Object.assign(newErrors, validatePersonalDetailsStep(profile, ssnVerify));
+    } else {
+      (WIZARD_STEP_FIELDS[step] || []).forEach((field) => {
+        if (!hasValue(profile, field)) {
+          newErrors[field] = 'This field is required';
+        }
+      });
+    }
+
+    if (step === 4) {
+      const month = Number(profile.drivers_license_exp_month);
+      const day = Number(profile.drivers_license_exp_day);
+      const year = Number(profile.drivers_license_exp_year);
+      if (month && day && year) {
+        const expiration = new Date(year, month - 1, day);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        if (expiration <= today) {
+          newErrors.drivers_license_exp_year =
+            'License expiration must be a future date.';
+        }
       }
-    });
+    }
 
     if (step === 1) {
       const email = String(profile.email ?? '');
@@ -265,10 +327,15 @@ export default function DriverOnboardingWizard(props: DriverOnboardingWizardProp
   const handleValidationFailure = () => {
     if (currentStep === 8) {
       setSaveError('Please complete all required vehicle fields before continuing.');
+    } else if (currentStep === 5) {
+      setSaveError('Please complete all personal details and verify your SSN before continuing.');
     }
   };
 
-  const saveCurrentStep = async (options?: { requireStates?: boolean }) => {
+  const saveCurrentStep = async (options?: {
+    requireStates?: boolean;
+    resumeStep?: number;
+  }) => {
     if (currentStep === 2) {
       const statesResult = await operatingStatesRef.current?.save({
         requireStates: options?.requireStates ?? true,
@@ -278,7 +345,9 @@ export default function DriverOnboardingWizard(props: DriverOnboardingWizardProp
       }
     }
 
-    return onSaveStep(currentStep);
+    return onSaveStep(currentStep, {
+      resumeStep: options?.resumeStep ?? currentStep,
+    });
   };
 
   const navigateToStep = async (
@@ -301,6 +370,7 @@ export default function DriverOnboardingWizard(props: DriverOnboardingWizardProp
     try {
       const result = await saveCurrentStep({
         requireStates: isForward,
+        resumeStep: targetStep,
       });
       if (!result.ok) {
         setSaveError(result.error);
@@ -478,7 +548,13 @@ export default function DriverOnboardingWizard(props: DriverOnboardingWizardProp
           <LicenseStep profile={profile} handleChange={handleChange} errors={errors} />
         )}
         {currentStep === 5 && (
-          <PersonalDetailsStep profile={profile} handleChange={handleChange} errors={errors} />
+          <PersonalDetailsStep
+            profile={profile}
+            handleChange={handleChange}
+            errors={errors}
+            ssnVerify={ssnVerify}
+            onSsnVerifyChange={handleSsnVerifyChange}
+          />
         )}
         {currentStep === 6 && (
           <EmergencyStep profile={profile} handleChange={handleChange} errors={errors} />
@@ -635,12 +711,44 @@ function PersonalInfoStep({ profile, handleChange, errors }: StepProps) {
         title="Personal Information"
         description="We need your basic contact information so organizations can reach you and we can verify your identity."
       />
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-      <Input label="First Name *" value={String(profile.first_name ?? '')} onChange={(v) => handleChange('first_name', v)} error={errors.first_name} />
-      <Input label="Last Name *" value={String(profile.last_name ?? '')} onChange={(v) => handleChange('last_name', v)} error={errors.last_name} />
-      <Input label="Email Address *" type="email" value={String(profile.email ?? '')} onChange={(v) => handleChange('email', v)} error={errors.email} />
-      <Input label="Phone Number *" value={String(profile.phone ?? '')} onChange={(v) => handleChange('phone', v)} error={errors.phone} />
-      <Select label="Phone Type *" value={String(profile.phone_type ?? '')} onChange={(v) => handleChange('phone_type', v)} options={['Mobile', 'Home', 'Work']} />
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+        <FormInput
+          label="First Name *"
+          value={String(profile.first_name ?? '')}
+          onChange={(value) => handleChange('first_name', value)}
+          error={errors.first_name}
+          autoComplete="given-name"
+        />
+        <FormInput
+          label="Last Name *"
+          value={String(profile.last_name ?? '')}
+          onChange={(value) => handleChange('last_name', value)}
+          error={errors.last_name}
+          autoComplete="family-name"
+        />
+        <FormInput
+          label="Email Address *"
+          type="email"
+          value={String(profile.email ?? '')}
+          onChange={(value) => handleChange('email', value)}
+          error={errors.email}
+          autoComplete="email"
+        />
+        <FormInput
+          label="Phone Number *"
+          type="tel"
+          value={String(profile.phone ?? '')}
+          onChange={(value) => handleChange('phone', value)}
+          error={errors.phone}
+          autoComplete="tel"
+        />
+        <FormSelect
+          label="Phone Type *"
+          value={selectValue(profile.phone_type)}
+          onChange={(value) => handleChange('phone_type', value)}
+          options={PHONE_TYPE_OPTIONS}
+          error={errors.phone_type}
+        />
       </div>
     </div>
   );
@@ -656,12 +764,40 @@ function AddressStep({ profile, handleChange, errors }: StepProps) {
       />
       <div>
         <h3 className="text-lg font-semibold text-[#1E3A8A] mb-4">Physical Address</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <Input label="Address Line 1 *" value={String(profile.physical_address_line1 ?? '')} onChange={(v) => handleChange('physical_address_line1', v)} error={errors.physical_address_line1} />
-          <Input label="Address Line 2" value={String(profile.physical_address_line2 ?? '')} onChange={(v) => handleChange('physical_address_line2', v)} />
-          <Input label="City *" value={String(profile.physical_city ?? '')} onChange={(v) => handleChange('physical_city', v)} error={errors.physical_city} />
-          <Input label="State *" value={String(profile.physical_state ?? '')} onChange={(v) => handleChange('physical_state', v)} error={errors.physical_state} />
-          <Input label="Postal Code *" value={String(profile.physical_postal_code ?? '')} onChange={(v) => handleChange('physical_postal_code', v)} error={errors.physical_postal_code} />
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+          <FormInput
+            label="Address Line 1 *"
+            value={String(profile.physical_address_line1 ?? '')}
+            onChange={(value) => handleChange('physical_address_line1', value)}
+            error={errors.physical_address_line1}
+            autoComplete="address-line1"
+          />
+          <FormInput
+            label="Address Line 2"
+            value={String(profile.physical_address_line2 ?? '')}
+            onChange={(value) => handleChange('physical_address_line2', value)}
+            autoComplete="address-line2"
+          />
+          <FormInput
+            label="City *"
+            value={String(profile.physical_city ?? '')}
+            onChange={(value) => handleChange('physical_city', value)}
+            error={errors.physical_city}
+            autoComplete="address-level2"
+          />
+          <UsStateSelect
+            label="State *"
+            value={selectValue(profile.physical_state)}
+            onChange={(value) => handleChange('physical_state', value)}
+            error={errors.physical_state}
+          />
+          <FormInput
+            label="Postal Code *"
+            value={String(profile.physical_postal_code ?? '')}
+            onChange={(value) => handleChange('physical_postal_code', value)}
+            error={errors.physical_postal_code}
+            autoComplete="postal-code"
+          />
         </div>
       </div>
       <div>
@@ -671,12 +807,36 @@ function AddressStep({ profile, handleChange, errors }: StepProps) {
           Mailing Address is the same as Physical Address
         </label>
         {!mailingSame && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <Input label="Mailing Address Line 1 *" value={String(profile.mailing_address_line1 ?? '')} onChange={(v) => handleChange('mailing_address_line1', v)} error={errors.mailing_address_line1} />
-            <Input label="Mailing Address Line 2" value={String(profile.mailing_address_line2 ?? '')} onChange={(v) => handleChange('mailing_address_line2', v)} />
-            <Input label="City *" value={String(profile.mailing_city ?? '')} onChange={(v) => handleChange('mailing_city', v)} error={errors.mailing_city} />
-            <Input label="State *" value={String(profile.mailing_state ?? '')} onChange={(v) => handleChange('mailing_state', v)} error={errors.mailing_state} />
-            <Input label="Postal Code *" value={String(profile.mailing_postal_code ?? '')} onChange={(v) => handleChange('mailing_postal_code', v)} error={errors.mailing_postal_code} />
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+            <FormInput
+              label="Mailing Address Line 1 *"
+              value={String(profile.mailing_address_line1 ?? '')}
+              onChange={(value) => handleChange('mailing_address_line1', value)}
+              error={errors.mailing_address_line1}
+            />
+            <FormInput
+              label="Mailing Address Line 2"
+              value={String(profile.mailing_address_line2 ?? '')}
+              onChange={(value) => handleChange('mailing_address_line2', value)}
+            />
+            <FormInput
+              label="City *"
+              value={String(profile.mailing_city ?? '')}
+              onChange={(value) => handleChange('mailing_city', value)}
+              error={errors.mailing_city}
+            />
+            <UsStateSelect
+              label="State *"
+              value={selectValue(profile.mailing_state)}
+              onChange={(value) => handleChange('mailing_state', value)}
+              error={errors.mailing_state}
+            />
+            <FormInput
+              label="Postal Code *"
+              value={String(profile.mailing_postal_code ?? '')}
+              onChange={(value) => handleChange('mailing_postal_code', value)}
+              error={errors.mailing_postal_code}
+            />
           </div>
         )}
       </div>
@@ -685,41 +845,196 @@ function AddressStep({ profile, handleChange, errors }: StepProps) {
 }
 
 function LicenseStep({ profile, handleChange, errors }: StepProps) {
+  const licenseDayOptions = useDateOfBirthOptions(
+    profile.drivers_license_exp_month,
+    profile.drivers_license_exp_year
+  );
+  const licenseYearOptions = useMemo(() => getLicenseExpirationYearOptions(), []);
+
   return (
     <div>
       <StepGuidance
         title="Driver's License"
         description="Your license information is required for background checks and to confirm you are legally allowed to drive."
       />
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-      <Input label="Driver's License Number *" value={String(profile.drivers_license_number ?? '')} onChange={(v) => handleChange('drivers_license_number', v)} error={errors.drivers_license_number} />
-      <Input label="Driver's License State *" value={String(profile.drivers_license_state ?? '')} onChange={(v) => handleChange('drivers_license_state', v)} error={errors.drivers_license_state} />
-      <Input label="Expiration Month *" type="number" min={1} max={12} value={numValue(profile.drivers_license_exp_month)} onChange={(v) => handleChange('drivers_license_exp_month', parseInt(v, 10) || null)} />
-      <Input label="Expiration Day *" type="number" min={1} max={31} value={numValue(profile.drivers_license_exp_day)} onChange={(v) => handleChange('drivers_license_exp_day', parseInt(v, 10) || null)} />
-      <Input label="Expiration Year *" type="number" min={1900} max={2100} value={numValue(profile.drivers_license_exp_year)} onChange={(v) => handleChange('drivers_license_exp_year', parseInt(v, 10) || null)} />
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+        <FormInput
+          label="Driver's License Number *"
+          value={String(profile.drivers_license_number ?? '')}
+          onChange={(value) => handleChange('drivers_license_number', value)}
+          error={errors.drivers_license_number}
+        />
+        <UsStateSelect
+          label="Driver's License State *"
+          value={selectValue(profile.drivers_license_state)}
+          onChange={(value) => handleChange('drivers_license_state', value)}
+          error={errors.drivers_license_state}
+        />
+      </div>
+      <div className="mt-6">
+        <DateOfBirthFields
+          groupLabel="License Expiration Date *"
+          month={selectValue(profile.drivers_license_exp_month)}
+          day={selectValue(profile.drivers_license_exp_day)}
+          year={selectValue(profile.drivers_license_exp_year)}
+          monthOptions={MONTH_OPTIONS}
+          dayOptions={licenseDayOptions}
+          yearOptions={licenseYearOptions}
+          onMonthChange={(value) => {
+            const month = value ? parseInt(value, 10) : null;
+            handleChange('drivers_license_exp_month', month);
+            const year = profile.drivers_license_exp_year as number | null;
+            const nextDay = reconcileDayAfterMonthYearChange(
+              profile.drivers_license_exp_day,
+              month,
+              typeof year === 'number' ? year : null
+            );
+            if (nextDay !== profile.drivers_license_exp_day) {
+              handleChange('drivers_license_exp_day', nextDay);
+            }
+          }}
+          onDayChange={(value) =>
+            handleChange('drivers_license_exp_day', value ? parseInt(value, 10) : null)
+          }
+          onYearChange={(value) => {
+            const year = value ? parseInt(value, 10) : null;
+            handleChange('drivers_license_exp_year', year);
+            const month = profile.drivers_license_exp_month as number | null;
+            const nextDay = reconcileDayAfterMonthYearChange(
+              profile.drivers_license_exp_day,
+              typeof month === 'number' ? month : null,
+              year
+            );
+            if (nextDay !== profile.drivers_license_exp_day) {
+              handleChange('drivers_license_exp_day', nextDay);
+            }
+          }}
+          error={
+            errors.drivers_license_exp_month ||
+            errors.drivers_license_exp_day ||
+            errors.drivers_license_exp_year
+          }
+        />
       </div>
     </div>
   );
 }
 
-function PersonalDetailsStep({ profile, handleChange, errors }: StepProps) {
+function PersonalDetailsStep({
+  profile,
+  handleChange,
+  errors,
+  ssnVerify,
+  onSsnVerifyChange,
+}: StepProps & {
+  ssnVerify: string;
+  onSsnVerifyChange: (value: string) => void;
+}) {
+  const birthYearOptions = useMemo(() => getBirthYearOptions(), []);
+  const birthDayOptions = useDateOfBirthOptions(profile.dob_month, profile.dob_year);
+
   return (
-    <div>
+    <div className="space-y-8">
       <StepGuidance
         title="Personal Details"
         description="These details help us with safety compliance and matching you with appropriate trips."
       />
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-      <Input label="DOB Month *" type="number" min={1} max={12} value={numValue(profile.dob_month)} onChange={(v) => handleChange('dob_month', parseInt(v, 10) || null)} error={errors.dob_month} />
-      <Input label="DOB Day *" type="number" min={1} max={31} value={numValue(profile.dob_day)} onChange={(v) => handleChange('dob_day', parseInt(v, 10) || null)} error={errors.dob_day} />
-      <Input label="DOB Year *" type="number" min={1900} max={2100} value={numValue(profile.dob_year)} onChange={(v) => handleChange('dob_year', parseInt(v, 10) || null)} error={errors.dob_year} />
-      <Input label="SSN *" value={String(profile.ssn ?? '')} onChange={(v) => handleChange('ssn', v)} error={errors.ssn} />
-      <Input label="Hair Color *" value={String(profile.hair_color ?? '')} onChange={(v) => handleChange('hair_color', v)} />
-      <Input label="Eye Color *" value={String(profile.eye_color ?? '')} onChange={(v) => handleChange('eye_color', v)} />
-      <Input label="Height (Feet) *" type="number" min={0} max={8} value={numValue(profile.height_feet)} onChange={(v) => handleChange('height_feet', parseInt(v, 10) || null)} />
-      <Input label="Height (Inches) *" type="number" min={0} max={11} value={numValue(profile.height_inches)} onChange={(v) => handleChange('height_inches', parseInt(v, 10) || null)} />
-      <Input label="Weight (lbs) *" type="number" min={1} value={numValue(profile.weight_lbs)} onChange={(v) => handleChange('weight_lbs', parseInt(v, 10) || null)} />
-      <Select label="Gender *" value={String(profile.gender ?? '')} onChange={(v) => handleChange('gender', v)} options={['Male', 'Female', 'Non-binary', 'Prefer not to say']} />
+
+      <DateOfBirthFields
+        month={selectValue(profile.dob_month)}
+        day={selectValue(profile.dob_day)}
+        year={selectValue(profile.dob_year)}
+        monthOptions={MONTH_OPTIONS}
+        dayOptions={birthDayOptions}
+        yearOptions={birthYearOptions}
+        onMonthChange={(value) => {
+          const month = value ? parseInt(value, 10) : null;
+          handleChange('dob_month', month);
+          const year = profile.dob_year as number | null;
+          const nextDay = reconcileDayAfterMonthYearChange(
+            profile.dob_day,
+            month,
+            typeof year === 'number' ? year : null
+          );
+          if (nextDay !== profile.dob_day) {
+            handleChange('dob_day', nextDay);
+          }
+        }}
+        onDayChange={(value) => handleChange('dob_day', value ? parseInt(value, 10) : null)}
+        onYearChange={(value) => {
+          const year = value ? parseInt(value, 10) : null;
+          handleChange('dob_year', year);
+          const month = profile.dob_month as number | null;
+          const nextDay = reconcileDayAfterMonthYearChange(
+            profile.dob_day,
+            typeof month === 'number' ? month : null,
+            year
+          );
+          if (nextDay !== profile.dob_day) {
+            handleChange('dob_day', nextDay);
+          }
+        }}
+        error={errors.dob}
+      />
+
+      <SsnFields
+        ssn={selectValue(profile.ssn)}
+        ssnVerify={ssnVerify}
+        onSsnChange={(value) => handleChange('ssn', value)}
+        onSsnVerifyChange={onSsnVerifyChange}
+        ssnError={errors.ssn}
+        ssnVerifyError={errors.ssn_verify}
+      />
+
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+        <FormSelect
+          label="Hair Color *"
+          value={selectValue(profile.hair_color)}
+          onChange={(value) => handleChange('hair_color', value)}
+          options={HAIR_COLOR_OPTIONS}
+          error={errors.hair_color}
+        />
+        <FormSelect
+          label="Eye Color *"
+          value={selectValue(profile.eye_color)}
+          onChange={(value) => handleChange('eye_color', value)}
+          options={EYE_COLOR_OPTIONS}
+          error={errors.eye_color}
+        />
+        <FormSelect
+          label="Height (Feet) *"
+          value={selectValue(profile.height_feet)}
+          onChange={(value) =>
+            handleChange('height_feet', value ? parseInt(value, 10) : null)
+          }
+          options={HEIGHT_FEET_OPTIONS}
+          error={errors.height_feet}
+        />
+        <FormSelect
+          label="Height (Inches) *"
+          value={selectValue(profile.height_inches)}
+          onChange={(value) =>
+            handleChange('height_inches', value ? parseInt(value, 10) : null)
+          }
+          options={HEIGHT_INCHES_OPTIONS}
+          error={errors.height_inches}
+        />
+        <FormInput
+          label="Weight (lbs) *"
+          type="number"
+          min={50}
+          max={500}
+          value={numValue(profile.weight_lbs)}
+          onChange={(value) => handleChange('weight_lbs', value ? parseInt(value, 10) : null)}
+          error={errors.weight_lbs}
+        />
+        <FormSelect
+          label="Gender *"
+          value={selectValue(profile.gender)}
+          onChange={(value) => handleChange('gender', value)}
+          options={GENDER_OPTIONS}
+          error={errors.gender}
+        />
       </div>
     </div>
   );
@@ -732,12 +1047,40 @@ function EmergencyStep({ profile, handleChange, errors }: StepProps) {
         title="Emergency Contact"
         description="In case of an emergency during a trip, we need someone we can contact quickly."
       />
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-      <Input label="First Name *" value={String(profile.emergency_contact_first_name ?? '')} onChange={(v) => handleChange('emergency_contact_first_name', v)} error={errors.emergency_contact_first_name} />
-      <Input label="Last Name *" value={String(profile.emergency_contact_last_name ?? '')} onChange={(v) => handleChange('emergency_contact_last_name', v)} error={errors.emergency_contact_last_name} />
-      <Input label="Phone Number *" value={String(profile.emergency_contact_phone ?? '')} onChange={(v) => handleChange('emergency_contact_phone', v)} error={errors.emergency_contact_phone} />
-      <Select label="Phone Type *" value={String(profile.emergency_contact_phone_type ?? '')} onChange={(v) => handleChange('emergency_contact_phone_type', v)} options={['Mobile', 'Home', 'Work']} />
-      <Input label="Relation *" value={String(profile.emergency_contact_relation ?? '')} onChange={(v) => handleChange('emergency_contact_relation', v)} placeholder="Spouse, Parent, Friend, etc." />
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+        <FormInput
+          label="First Name *"
+          value={String(profile.emergency_contact_first_name ?? '')}
+          onChange={(value) => handleChange('emergency_contact_first_name', value)}
+          error={errors.emergency_contact_first_name}
+        />
+        <FormInput
+          label="Last Name *"
+          value={String(profile.emergency_contact_last_name ?? '')}
+          onChange={(value) => handleChange('emergency_contact_last_name', value)}
+          error={errors.emergency_contact_last_name}
+        />
+        <FormInput
+          label="Phone Number *"
+          type="tel"
+          value={String(profile.emergency_contact_phone ?? '')}
+          onChange={(value) => handleChange('emergency_contact_phone', value)}
+          error={errors.emergency_contact_phone}
+        />
+        <FormSelect
+          label="Phone Type *"
+          value={selectValue(profile.emergency_contact_phone_type)}
+          onChange={(value) => handleChange('emergency_contact_phone_type', value)}
+          options={PHONE_TYPE_OPTIONS}
+          error={errors.emergency_contact_phone_type}
+        />
+        <FormInput
+          label="Relation *"
+          value={String(profile.emergency_contact_relation ?? '')}
+          onChange={(value) => handleChange('emergency_contact_relation', value)}
+          placeholder="Spouse, Parent, Friend, etc."
+          error={errors.emergency_contact_relation}
+        />
       </div>
     </div>
   );
@@ -848,28 +1191,40 @@ function VehicleStep({
           </div>
         )}
 
-        <div className="grid sm:grid-cols-3 gap-4 mb-4">
-          <div>
-            <label className="block text-sm font-medium text-blue-950 mb-1">Year</label>
-            <input type="number" min="1980" max={new Date().getFullYear() + 1} value={vehicleYear} onChange={(e) => onVehicleYearChange(e.target.value)} className="w-full border border-gray-300 rounded-xl px-3 py-2 text-blue-950" placeholder="2020" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-blue-950 mb-1">Make</label>
-            <input type="text" value={vehicleMake} onChange={(e) => onVehicleMakeChange(e.target.value)} className="w-full border border-gray-300 rounded-xl px-3 py-2 text-blue-950" placeholder="Toyota" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-blue-950 mb-1">Model</label>
-            <input type="text" value={vehicleModel} onChange={(e) => onVehicleModelChange(e.target.value)} className="w-full border border-gray-300 rounded-xl px-3 py-2 text-blue-950" placeholder="Sienna" />
-          </div>
+        <div className="mb-4 grid gap-4 sm:grid-cols-3">
+          <FormSelect
+            label="Year *"
+            value={vehicleYear}
+            onChange={onVehicleYearChange}
+            options={getVehicleYearOptions()}
+            placeholder="Select year"
+          />
+          <FormInput
+            label="Make *"
+            value={vehicleMake}
+            onChange={onVehicleMakeChange}
+            placeholder="Toyota"
+          />
+          <FormInput
+            label="Model *"
+            value={vehicleModel}
+            onChange={onVehicleModelChange}
+            placeholder="Sienna"
+          />
         </div>
 
         <div className={`mb-4 p-4 rounded-xl border ${capacitySuggestion.matched ? 'bg-blue-50 border-blue-200' : 'bg-gray-50 border-gray-200'}`}>
           <p className="text-sm text-blue-900">{capacitySuggestion.message}</p>
         </div>
 
-        <div className="mb-4">
-          <label className="block text-sm font-medium text-blue-950 mb-1">Passenger Capacity (excluding you)</label>
-          <input type="number" min="1" max="50" value={passengerCapacity} onChange={(e) => onPassengerCapacityChange(e.target.value)} className="w-full max-w-xs border border-gray-300 rounded-xl px-3 py-2 text-blue-950" />
+        <div className="mb-4 max-w-xs">
+          <FormSelect
+            label="Passenger Capacity (excluding you) *"
+            value={passengerCapacity}
+            onChange={onPassengerCapacityChange}
+            options={PASSENGER_CAPACITY_OPTIONS}
+            placeholder="Select capacity"
+          />
         </div>
 
         {isCapacityOverride && (
@@ -999,59 +1354,3 @@ function DocumentsStep({
   );
 }
 
-function Input({
-  label,
-  value,
-  onChange,
-  error,
-  ...props
-}: {
-  label: string;
-  value: string | number;
-  onChange: (value: string) => void;
-  error?: string;
-} & Omit<InputHTMLAttributes<HTMLInputElement>, 'onChange' | 'value'>) {
-  return (
-    <div>
-      <label className="block text-sm font-medium text-gray-700 mb-2">{label}</label>
-      <input
-        {...props}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className={`w-full border rounded-xl px-4 py-3 text-blue-950 focus:border-[#1E3A8A] focus:ring-1 focus:ring-[#1E3A8A] ${error ? 'border-red-500' : 'border-gray-300'}`}
-      />
-      {error && <p className="text-red-500 text-sm mt-1">{error}</p>}
-    </div>
-  );
-}
-
-function Select({
-  label,
-  options,
-  value,
-  onChange,
-  error,
-}: {
-  label: string;
-  options: string[];
-  value: string;
-  onChange: (value: string) => void;
-  error?: string;
-}) {
-  return (
-    <div>
-      <label className="block text-sm font-medium text-gray-700 mb-2">{label}</label>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className={`w-full border rounded-xl px-4 py-3 text-blue-950 focus:border-[#1E3A8A] ${error ? 'border-red-500' : 'border-gray-300'}`}
-      >
-        <option value="">Select...</option>
-        {options.map((opt) => (
-          <option key={opt} value={opt}>{opt}</option>
-        ))}
-      </select>
-      {error && <p className="text-red-500 text-sm mt-1">{error}</p>}
-    </div>
-  );
-}

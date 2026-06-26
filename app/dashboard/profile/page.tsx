@@ -14,7 +14,11 @@ import {
   persistOnboardingWizardStep,
   type WizardStepSaveResult,
 } from '@/lib/driver/wizard-step-save';
-import { WIZARD_PERSONAL_SAVE_STEPS, clampWizardStep } from '@/lib/driver/wizard-steps';
+import {
+  WIZARD_PERSONAL_SAVE_STEPS,
+  clampWizardStep,
+  resolveInitialWizardStep,
+} from '@/lib/driver/wizard-steps';
 import ProfilePhotoRejectionPanel from '@/components/driver/ProfilePhotoRejectionPanel';
 import {
   deleteDriverProfilePhoto,
@@ -125,13 +129,16 @@ export default function DriverProfile() {
           };
 
       setProfile(profileData);
-      setSavedWizardStep(
-        clampWizardStep(
-          parseInt(searchParams.get('step') || '0', 10) ||
-            (prof?.onboarding_wizard_step as number | undefined) ||
-            1
-        )
+
+      const initialStep = resolveInitialWizardStep(
+        searchParams.get('step'),
+        prof?.onboarding_wizard_step as number | undefined
       );
+      setSavedWizardStep(initialStep);
+
+      if (!searchParams.get('step') && prof?.onboarding_wizard_step) {
+        router.replace(`/dashboard/profile?step=${initialStep}`, { scroll: false });
+      }
 
       if (prof) {
         setVehicleYear(prof.vehicle_year ? String(prof.vehicle_year) : '');
@@ -365,7 +372,10 @@ export default function DriverProfile() {
   );
 
   const saveWizardStep = useCallback(
-    async (step: number): Promise<WizardStepSaveResult> => {
+    async (
+      step: number,
+      options?: { resumeStep?: number }
+    ): Promise<WizardStepSaveResult> => {
       if (!user) {
         return { ok: false, error: 'You must be signed in to save your profile.' };
       }
@@ -383,10 +393,11 @@ export default function DriverProfile() {
 
       if (!result.ok) return result;
 
-      const stepPersist = await persistOnboardingWizardStep(supabase, user.id, step);
+      const stepToPersist = clampWizardStep(options?.resumeStep ?? step);
+      const stepPersist = await persistOnboardingWizardStep(supabase, user.id, stepToPersist);
       if (!stepPersist.ok) return stepPersist;
 
-      setSavedWizardStep(step);
+      setSavedWizardStep(stepToPersist);
       await refreshProfileCompletion();
       return { ok: true };
     },
