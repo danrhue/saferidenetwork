@@ -41,7 +41,11 @@ export default function DriverProfile() {
 
   const searchParams = useSearchParams();
   const router = useRouter();
-  const { refresh: refreshProfileCompletion } = useProfileCompletion();
+  const {
+    refresh: refreshProfileCompletion,
+    profileCompletion,
+    documentContext,
+  } = useProfileCompletion();
 
   // Vehicle & seating
   const [vehicleYear, setVehicleYear] = useState('');
@@ -398,12 +402,13 @@ export default function DriverProfile() {
   );
 
   const handleWizardStepAdvanced = useCallback(
-    (step: number) => {
+    async (step: number) => {
       const safe = clampWizardStep(step);
       setSavedWizardStep(safe);
       router.replace(`/dashboard/profile?step=${safe}`, { scroll: false });
+      await refreshProfileCompletion();
     },
-    [router]
+    [router, refreshProfileCompletion]
   );
 
   const saveVehicleProfile = async () => {
@@ -495,8 +500,9 @@ export default function DriverProfile() {
           savingVehicle={savingVehicle}
           vehicleMessage={vehicleMessage}
           onSaveVehicle={saveVehicleProfile}
-          documentsUploaded={documentsUploaded}
-          documentsRequired={documentsRequired}
+          documentsUploaded={documentContext.documentsUploaded}
+          documentsRequired={documentContext.documentsRequired}
+          profileCompletion={profileCompletion}
         />
       )}
 

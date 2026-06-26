@@ -1,7 +1,10 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useProfileCompletion } from '@/lib/driver/useProfileCompletion';
+import {
+  ProfileCompletionProvider,
+  useProfileCompletion,
+} from '@/lib/driver/useProfileCompletion';
 import { useRouter, usePathname } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { resolveProfilePhotoForProfile } from '@/lib/storage/profile-photos';
@@ -249,7 +252,9 @@ export default function DashboardLayout({
 }) {
   return (
     <WizardLeaveGuardProvider>
-      <DashboardLayoutShell>{children}</DashboardLayoutShell>
+      <ProfileCompletionProvider>
+        <DashboardLayoutShell>{children}</DashboardLayoutShell>
+      </ProfileCompletionProvider>
     </WizardLeaveGuardProvider>
   );
 }

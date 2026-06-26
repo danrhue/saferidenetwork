@@ -2,7 +2,10 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { calculateDriverCompletion } from '@/lib/driver/onboarding-completion';
+import {
+  buildDocumentCompletionContext,
+  getDriverCompletionPercent,
+} from '@/lib/driver/profile-completion';
 import {
   calculateDriverOverviewStats,
   calculatePendingTasks,
@@ -78,12 +81,8 @@ export function useDriverOverview() {
       // Partial data is acceptable for overview rendering
     }
 
-    const uploadableRequired = required.filter((d) => d.uploadable).length;
-    const uploadedTypes = new Set(docs.map((d) => d.document_type)).size;
-    const profileCompletion = calculateDriverCompletion(profileData, {
-      documentsUploaded: uploadedTypes,
-      documentsRequired: uploadableRequired,
-    });
+    const docCtx = buildDocumentCompletionContext(docs, required);
+    const profileCompletion = getDriverCompletionPercent(profileData, docCtx);
 
     const tasks = calculatePendingTasks(profileData, docs, required);
     const overviewStats = calculateDriverOverviewStats(

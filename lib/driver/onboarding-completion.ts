@@ -1,50 +1,12 @@
-import { isPersonalDetailsStepComplete } from '@/lib/driver/wizard-step-completion';
-import { hasProfilePhotoForOnboarding } from '@/lib/profile-photo';
+import type { WizardCompletionContext } from '@/lib/driver/wizard-steps';
+import { getDriverCompletionPercent } from '@/lib/driver/profile-completion';
 
 export type PersonalProfile = Record<string, unknown>;
 
-function hasValue(profile: PersonalProfile, field: string): boolean {
-  const value = profile[field];
-  if (value == null || value === '') return false;
-  if (typeof value === 'string') return value.trim().length > 0;
-  return true;
-}
-
+/** @deprecated Prefer getDriverCompletionPercent — kept for existing imports. */
 export function calculateDriverCompletion(
   profile: PersonalProfile,
-  options: {
-    documentsUploaded: number;
-    documentsRequired: number;
-  }
+  options: WizardCompletionContext
 ): number {
-  const mailingOk =
-    profile.mailing_same_as_physical !== false ||
-    (hasValue(profile, 'mailing_address_line1') && hasValue(profile, 'mailing_city'));
-
-  const checks = [
-    hasValue(profile, 'first_name') &&
-      hasValue(profile, 'last_name') &&
-      hasValue(profile, 'email') &&
-      hasValue(profile, 'phone'),
-    hasValue(profile, 'physical_address_line1') &&
-      hasValue(profile, 'physical_city') &&
-      hasValue(profile, 'physical_state') &&
-      mailingOk,
-    hasValue(profile, 'drivers_license_number') && hasValue(profile, 'drivers_license_state'),
-    isPersonalDetailsStepComplete(profile),
-    hasValue(profile, 'emergency_contact_first_name') &&
-      hasValue(profile, 'emergency_contact_phone'),
-    hasProfilePhotoForOnboarding(profile),
-    !!(
-      profile.vehicle_year &&
-      profile.vehicle_make &&
-      profile.vehicle_model &&
-      profile.passenger_capacity
-    ),
-    options.documentsRequired > 0 &&
-      options.documentsUploaded >= options.documentsRequired,
-  ];
-
-  const filled = checks.filter(Boolean).length;
-  return Math.round((filled / checks.length) * 100);
+  return getDriverCompletionPercent(profile, options);
 }

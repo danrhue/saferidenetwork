@@ -16,7 +16,7 @@ import {
   useDateOfBirthOptions,
 } from '@/components/driver/WizardFormFields';
 import { useRegisterWizardLeaveGuard } from '@/components/driver/WizardLeaveGuard';
-import { calculateDriverCompletion } from '@/lib/driver/onboarding-completion';
+
 import {
   GENDER_OPTIONS,
   HAIR_COLOR_OPTIONS,
@@ -104,6 +104,7 @@ export type DriverOnboardingWizardProps = {
   onSaveVehicle: () => void;
   documentsUploaded: number;
   documentsRequired: number;
+  profileCompletion: number;
   initialStep?: number;
   onDrivingStatesSaved?: (result: OperatingStatesSaveResult) => void | Promise<void>;
 };
@@ -140,6 +141,7 @@ export default function DriverOnboardingWizard(props: DriverOnboardingWizardProp
     onSaveVehicle,
     documentsUploaded,
     documentsRequired,
+    profileCompletion,
     initialStep = 1,
     onDrivingStatesSaved,
   } = props;
@@ -164,24 +166,6 @@ export default function DriverOnboardingWizard(props: DriverOnboardingWizardProp
   const clearUnsavedChanges = useCallback(() => {
     setHasUnsavedChanges(false);
   }, []);
-
-  const completionProfile = useMemo(
-    () => ({
-      ...profile,
-      vehicle_year: vehicleYear ? parseInt(vehicleYear, 10) : profile.vehicle_year,
-      vehicle_make: vehicleMake || profile.vehicle_make,
-      vehicle_model: vehicleModel || profile.vehicle_model,
-      passenger_capacity: passengerCapacity
-        ? parseInt(passengerCapacity, 10)
-        : profile.passenger_capacity,
-    }),
-    [profile, vehicleYear, vehicleMake, vehicleModel, passengerCapacity]
-  );
-
-  const completion = calculateDriverCompletion(completionProfile, {
-    documentsUploaded,
-    documentsRequired,
-  });
 
   useEffect(() => {
     setCurrentStep(clampWizardStep(initialStep));
@@ -482,7 +466,7 @@ export default function DriverOnboardingWizard(props: DriverOnboardingWizardProp
             {stepSaving ? 'Saving…' : 'Save & Exit'}
           </button>
           <div className="text-right">
-            <div className="text-5xl font-bold text-[#1E3A8A]">{completion}%</div>
+            <div className="text-5xl font-bold text-[#1E3A8A]">{profileCompletion}%</div>
             <div className="text-sm text-gray-500">Complete</div>
           </div>
         </div>
@@ -491,7 +475,7 @@ export default function DriverOnboardingWizard(props: DriverOnboardingWizardProp
       <div className="h-3 bg-gray-100 rounded-full mb-10 overflow-hidden">
         <div
           className="h-3 bg-[#1E3A8A] transition-all duration-500"
-          style={{ width: `${completion}%` }}
+          style={{ width: `${profileCompletion}%` }}
         />
       </div>
 

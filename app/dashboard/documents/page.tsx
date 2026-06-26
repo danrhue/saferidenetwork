@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
+import { Check } from 'lucide-react';
 import {
   findDriverDocument,
   formatDocumentValidity,
@@ -9,6 +10,7 @@ import {
 import { isDocumentExpired } from '@/lib/driver/document-expiration';
 import { toDateInputValue } from '@/lib/driver/document-dates';
 import { useRequiredDriverDocuments } from '@/lib/driver/useRequiredDriverDocuments';
+import { useProfileCompletion } from '@/lib/driver/useProfileCompletion';
 import { formatStateList } from '@/lib/driver/us-states';
 import { uploadDriverDocument } from '@/app/actions/driver-documents';
 
@@ -23,6 +25,11 @@ interface Document {
   rejection_reason?: string;
 }
 
+type ExpirySaveStatus = 'idle' | 'saving' | 'saved' | 'error';
+
+const EXPIRY_SAVE_DEBOUNCE_MS = 600;
+const SAVED_INDICATOR_MS = 2500;
+
 export default function DriverDocumentsPage() {
   const {
     loading: requirementsLoading,
@@ -30,14 +37,27 @@ export default function DriverDocumentsPage() {
     drivingStates,
     message: requirementsMessage,
   } = useRequiredDriverDocuments();
+  const { refresh: refreshProfileCompletion } = useProfileCompletion();
   const [documents, setDocuments] = useState<Document[]>([]);
   const [uploading, setUploading] = useState<string | null>(null);
-  const [savingDate, setSavingDate] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [expiryDates, setExpiryDates] = useState<Record<string, string>>({});
+  const [expirySaveStatus, setExpirySaveStatus] = useState<
+    Record<string, ExpirySaveStatus>
+  >({});
+  const [expirySaveError, setExpirySaveError] = useState<Record<string, string>>({});
+  const debounceTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const savedIndicatorTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   useEffect(() => {
     fetchDocuments();
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      Object.values(debounceTimers.current).forEach(clearTimeout);
+      Object.values(savedIndicatorTimers.current).forEach(clearTimeout);
+    };
   }, []);
 
   useEffect(() => {
@@ -82,36 +102,107 @@ export default function DriverDocumentsPage() {
     return undefined;
   };
 
-  const saveExpirationDate = async (documentType: string) => {
-    const date = expiryDates[documentType];
-    if (!date) return;
-
-    if (new Date(`${date}T23:59:59Z`).getTime() <= Date.now()) {
-      alert('Expiration date must be in the future.');
-      return;
+  const showSavedIndicator = useCallback((documentType: string) => {
+    if (savedIndicatorTimers.current[documentType]) {
+      clearTimeout(savedIndicatorTimers.current[documentType]);
     }
+    setExpirySaveStatus((prev) => ({ ...prev, [documentType]: 'saved' }));
+    savedIndicatorTimers.current[documentType] = setTimeout(() => {
+      setExpirySaveStatus((prev) => ({ ...prev, [documentType]: 'idle' }));
+      delete savedIndicatorTimers.current[documentType];
+    }, SAVED_INDICATOR_MS);
+  }, []);
 
-    setSavingDate(documentType);
+  const persistExpirationDate = useCallback(
+    async (documentType: string, date: string) => {
+      if (!date) return;
 
-    try {
-      const res = await fetch('/api/driver/update-expiry', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ documentType, expiresAt: date }),
-      });
-
-      const data = await res.json().catch(() => ({}));
-
-      if (res.ok) {
-        await fetchDocuments();
-        alert('Expiration date saved successfully!');
-      } else {
-        alert(data.error || 'Failed to save expiration date.');
+      if (new Date(`${date}T23:59:59Z`).getTime() <= Date.now()) {
+        setExpirySaveStatus((prev) => ({ ...prev, [documentType]: 'error' }));
+        setExpirySaveError((prev) => ({
+          ...prev,
+          [documentType]: 'Expiration date must be in the future.',
+        }));
+        return;
       }
-    } catch {
-      alert('Error saving expiration date.');
-    } finally {
-      setSavingDate(null);
+
+      const existing = findDriverDocument(documents, documentType);
+      if (!existing) {
+        return;
+      }
+
+      if (
+        existing.expires_at &&
+        toDateInputValue(existing.expires_at) === date
+      ) {
+        return;
+      }
+
+      setExpirySaveStatus((prev) => ({ ...prev, [documentType]: 'saving' }));
+      setExpirySaveError((prev) => ({ ...prev, [documentType]: '' }));
+
+      try {
+        const res = await fetch('/api/driver/update-expiry', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ documentType, expiresAt: date }),
+        });
+
+        const data = await res.json().catch(() => ({}));
+
+        if (res.ok) {
+          await fetchDocuments();
+          showSavedIndicator(documentType);
+        } else {
+          setExpirySaveStatus((prev) => ({ ...prev, [documentType]: 'error' }));
+          setExpirySaveError((prev) => ({
+            ...prev,
+            [documentType]: data.error || 'Failed to save expiration date.',
+          }));
+        }
+      } catch {
+        setExpirySaveStatus((prev) => ({ ...prev, [documentType]: 'error' }));
+        setExpirySaveError((prev) => ({
+          ...prev,
+          [documentType]: 'Error saving expiration date.',
+        }));
+      }
+    },
+    [documents, showSavedIndicator]
+  );
+
+  const scheduleExpirySave = useCallback(
+    (documentType: string, date: string) => {
+      if (debounceTimers.current[documentType]) {
+        clearTimeout(debounceTimers.current[documentType]);
+      }
+      debounceTimers.current[documentType] = setTimeout(() => {
+        void persistExpirationDate(documentType, date);
+        delete debounceTimers.current[documentType];
+      }, EXPIRY_SAVE_DEBOUNCE_MS);
+    },
+    [persistExpirationDate]
+  );
+
+  const handleExpiryChange = (documentType: string, value: string) => {
+    setExpiryDates((prev) => ({ ...prev, [documentType]: value }));
+    setExpirySaveError((prev) => ({ ...prev, [documentType]: '' }));
+
+    const existing = findDriverDocument(documents, documentType);
+    if (existing && value) {
+      setExpirySaveStatus((prev) => ({ ...prev, [documentType]: 'idle' }));
+      scheduleExpirySave(documentType, value);
+    }
+  };
+
+  const handleExpiryBlur = (documentType: string) => {
+    if (debounceTimers.current[documentType]) {
+      clearTimeout(debounceTimers.current[documentType]);
+      delete debounceTimers.current[documentType];
+    }
+    const date = expiryDates[documentType];
+    if (date) {
+      void persistExpirationDate(documentType, date);
     }
   };
 
@@ -145,6 +236,7 @@ export default function DriverDocumentsPage() {
       const result = await uploadDriverDocument(formData);
       if (result.success) {
         await fetchDocuments();
+        await refreshProfileCompletion();
       }
     } catch (error: unknown) {
       console.error('Upload error:', error);
@@ -185,6 +277,27 @@ export default function DriverDocumentsPage() {
       default:
         return <span className="px-3 py-1 text-xs font-medium bg-gray-100 text-gray-600 rounded-full">Uploaded</span>;
     }
+  };
+
+  const renderExpirySaveStatus = (documentType: string) => {
+    const status = expirySaveStatus[documentType] ?? 'idle';
+    const error = expirySaveError[documentType];
+
+    if (status === 'saving') {
+      return <span className="text-xs text-gray-500">Saving…</span>;
+    }
+    if (status === 'saved') {
+      return (
+        <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700">
+          <Check size={14} strokeWidth={2.5} aria-hidden />
+          Saved
+        </span>
+      );
+    }
+    if (status === 'error' && error) {
+      return <span className="text-xs text-red-600">{error}</span>;
+    }
+    return null;
   };
 
   const getFilePreview = (doc: Document) => {
@@ -264,12 +377,10 @@ export default function DriverDocumentsPage() {
         {requiredDocuments.map((doc) => {
           const existing = findDriverDocument(documents, doc.type);
           const isUploading = uploading === doc.type;
-          const isSaving = savingDate === doc.type;
           const showExpiration = doc.requiresExpiration === true || !!doc.validityYears;
           const expiryValue =
             expiryDates[doc.type] ||
             (existing?.expires_at ? toDateInputValue(existing.expires_at) : '');
-          const canSaveExpiry = !!expiryValue && !!existing;
 
           return (
             <div
@@ -291,37 +402,38 @@ export default function DriverDocumentsPage() {
 
               {showExpiration && (
                 <div className="mb-4 p-4 border rounded-xl bg-gray-50">
-                  <label className="block text-sm font-medium mb-2">
-                    Expiration Date{doc.requiresExpiration ? ' *' : ''}
-                  </label>
-                  <div className="flex gap-3">
-                    <input
-                      type="date"
-                      required={doc.requiresExpiration}
-                      min={new Date().toISOString().split('T')[0]}
-                      value={expiryValue}
-                      onChange={(e) =>
-                        setExpiryDates((prev) => ({ ...prev, [doc.type]: e.target.value }))
-                      }
-                      className="flex-1 border border-gray-300 rounded-lg px-4 py-2 text-sm"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => saveExpirationDate(doc.type)}
-                      disabled={isSaving || !canSaveExpiry}
-                      className="px-6 py-2 bg-[#1E3A8A] text-white rounded-lg hover:bg-[#162d6b] disabled:opacity-50 text-sm font-medium whitespace-nowrap"
-                    >
-                      {isSaving ? 'Saving...' : 'Save Date'}
-                    </button>
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <label htmlFor={`expiry-${doc.type}`} className="block text-sm font-medium">
+                      Expiration Date{doc.requiresExpiration ? ' *' : ''}
+                    </label>
+                    {renderExpirySaveStatus(doc.type)}
                   </div>
+                  <input
+                    id={`expiry-${doc.type}`}
+                    type="date"
+                    required={doc.requiresExpiration}
+                    min={new Date().toISOString().split('T')[0]}
+                    value={expiryValue}
+                    onChange={(e) => handleExpiryChange(doc.type, e.target.value)}
+                    onBlur={() => handleExpiryBlur(doc.type)}
+                    className="w-full border border-gray-300 rounded-lg px-4 py-2 text-sm"
+                    aria-describedby={
+                      !existing && expiryValue ? `expiry-hint-${doc.type}` : undefined
+                    }
+                  />
                   {formatDocumentValidity(doc) && (
                     <p className="text-xs text-gray-500 mt-2">
                       Typically {formatDocumentValidity(doc)?.toLowerCase()}
                     </p>
                   )}
                   {!existing && expiryValue && (
+                    <p id={`expiry-hint-${doc.type}`} className="text-xs text-gray-500 mt-2">
+                      Date will be saved automatically when you upload this document.
+                    </p>
+                  )}
+                  {existing && (
                     <p className="text-xs text-gray-500 mt-2">
-                      Upload the document first, then save the expiration date.
+                      Changes save automatically.
                     </p>
                   )}
                 </div>
