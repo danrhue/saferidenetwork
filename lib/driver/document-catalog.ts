@@ -65,6 +65,11 @@ export const DOCUMENT_CATEGORY_ORDER: DocumentCategoryId[] = [
   'other',
 ];
 
+export type DocumentFormDownload = {
+  label: string;
+  url: string;
+};
+
 export type RequiredDocument = {
   type: string;
   label: string;
@@ -77,6 +82,8 @@ export type RequiredDocument = {
   uploadable: boolean;
   actionLabel?: string;
   requiresExpiration?: boolean;
+  /** Optional blank form drivers can download before uploading a completed copy. */
+  formDownload?: DocumentFormDownload;
 };
 
 /** Default document types seeded for every state (generic labels — no state names). */
@@ -184,6 +191,10 @@ export const DRIVER_DOCUMENT_CATALOG: Record<string, RequiredDocument> = {
     uploadable: true,
     requiresExpiration: true,
     specialNote: 'Missouri drivers only — separate from the general vehicle inspection requirement.',
+    formDownload: {
+      label: 'Download Missouri Inspection Form',
+      url: 'https://iwnhwunwsbijnzqrgskq.supabase.co/storage/v1/object/public/documents/State%20of%20Missouri%20Certified%20Mechanic%20Vehicle%20Inspection%20Form.pdf',
+    },
   },
   english_language_proficiency: {
     type: 'english_language_proficiency',

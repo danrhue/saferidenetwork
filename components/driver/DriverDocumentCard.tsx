@@ -1,6 +1,6 @@
 'use client';
 
-import { Check, ExternalLink, FileText, Upload } from 'lucide-react';
+import { Check, Download, ExternalLink, FileText, Upload } from 'lucide-react';
 import DocumentDescription from '@/components/driver/DocumentDescription';
 import {
   formatDocumentValidity,
@@ -217,6 +217,18 @@ export default function DriverDocumentCard({
 
         <div className="mt-auto space-y-2">
           <div className="flex flex-col gap-2 sm:flex-col">
+            {doc.formDownload && (
+              <a
+                href={doc.formDownload.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex w-full items-center justify-center gap-2 rounded-xl border-2 border-[#1E3A8A] bg-blue-50 px-4 py-2.5 text-sm font-semibold text-[#1E3A8A] transition hover:bg-blue-100"
+              >
+                <Download size={15} strokeWidth={2} aria-hidden />
+                {doc.formDownload.label}
+              </a>
+            )}
+
             {doc.uploadable ? (
               <label className="block w-full cursor-pointer">
                 <input
