@@ -1,6 +1,7 @@
 'use client';
 
 import { Check, ExternalLink, FileText, Upload } from 'lucide-react';
+import DocumentDescription from '@/components/driver/DocumentDescription';
 import {
   formatDocumentValidity,
   type RequiredDocument,
@@ -58,64 +59,6 @@ function statusBadgeClass(label: string): string {
   if (label === 'Pending Review') return 'bg-amber-50 text-amber-800 border-amber-200';
   if (label === 'Uploaded') return 'bg-blue-50 text-blue-800 border-blue-200';
   return 'bg-gray-50 text-gray-600 border-gray-200';
-}
-
-function renderLineWithLinks(line: string, key: string) {
-  const parts = line.split(/(https:\/\/[^\s]+)/g);
-
-  return (
-    <p key={key}>
-      {parts.map((part, index) =>
-        part.startsWith('https://') ? (
-          <a
-            key={`${key}-${index}`}
-            href={part}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="break-all font-medium text-[#1E3A8A] hover:underline"
-          >
-            {part}
-          </a>
-        ) : (
-          <span key={`${key}-${index}`}>{part}</span>
-        )
-      )}
-    </p>
-  );
-}
-
-function isBulletLine(line: string): boolean {
-  const trimmed = line.trim();
-  return /^[•◾\-\*]\s/.test(trimmed);
-}
-
-function formatBulletLine(line: string): string {
-  return line.trim().replace(/^[•◾\-\*]\s*/, '');
-}
-
-function DocumentDescription({ text }: { text: string }) {
-  return (
-    <div className="mt-2 space-y-1.5 text-sm leading-relaxed text-gray-600">
-      {text.split('\n').map((line, index) => {
-        if (line.trim() === '') {
-          return <div key={index} className="h-1" aria-hidden />;
-        }
-
-        if (isBulletLine(line)) {
-          return (
-            <p key={index} className="flex gap-2 pl-1">
-              <span className="shrink-0 text-blue-900" aria-hidden>
-                •
-              </span>
-              <span className="min-w-0">{formatBulletLine(line)}</span>
-            </p>
-          );
-        }
-
-        return renderLineWithLinks(line, String(index));
-      })}
-    </div>
-  );
 }
 
 function ExpirySaveIndicator({
@@ -181,11 +124,9 @@ export default function DriverDocumentCard({
           </span>
         </div>
 
-        {doc.description && <DocumentDescription text={doc.description} />}
-
-        <div className="mt-3 space-y-1 text-xs text-gray-500">
+        <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500">
           <p>
-            Cost:{' '}
+            <span className="font-medium text-gray-600">Cost:</span>{' '}
             <span
               className={
                 doc.cost.includes('Driver') ? 'font-medium text-orange-700' : 'font-medium text-emerald-700'
@@ -194,9 +135,18 @@ export default function DriverDocumentCard({
               {doc.cost}
             </span>
           </p>
-          {validityText && <p>{validityText}</p>}
-          {doc.specialNote && <p className="italic">{doc.specialNote}</p>}
+          {validityText && (
+            <p>
+              <span className="font-medium text-gray-600">Validity:</span> {validityText}
+            </p>
+          )}
         </div>
+
+        {doc.description && <DocumentDescription text={doc.description} />}
+
+        {doc.specialNote && (
+          <p className="mt-2 text-xs italic leading-relaxed text-gray-500">{doc.specialNote}</p>
+        )}
       </div>
 
       <div className="flex flex-1 flex-col gap-4 px-4 py-4">
