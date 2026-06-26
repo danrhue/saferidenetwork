@@ -1,3 +1,7 @@
+import {
+  DEFAULT_ACCIDENT_PREVENTION_COURSE_DESCRIPTION,
+} from '@/lib/driver/accident-prevention-course-copy';
+
 export type RequiredDocument = {
   type: string;
   label: string;
@@ -129,14 +133,13 @@ export const DRIVER_DOCUMENT_CATALOG: Record<string, RequiredDocument> = {
   accident_prevention_course: {
     type: 'accident_prevention_course',
     label: 'Vehicle Accident Prevention Course',
-    cost: 'Driver is responsible for the cost',
+    cost: 'Typically $20–$30 (paid by you)',
     validityYears: 3,
     uploadable: true,
     requiresExpiration: true,
-    description:
-      'Complete an approved vehicle accident prevention (defensive driving) course and upload your certificate. Renewal is typically required every 3 years.',
+    description: DEFAULT_ACCIDENT_PREVENTION_COURSE_DESCRIPTION,
     specialNote:
-      'Kansas drivers: must use a KSDE-approved course — see full K.A.R. 91-38-6 requirements on this card when Kansas is an operating state.',
+      'Kansas drivers: see K.A.R. 91-38-6 details and approved provider links on this card.',
   },
   tb_test: {
     type: 'tb_test',
