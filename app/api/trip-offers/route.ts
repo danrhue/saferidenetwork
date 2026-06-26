@@ -6,6 +6,10 @@ import {
   tripFitsDriverCapacity,
   type DriverSeatingProfile,
 } from '@/lib/seating-validation';
+import {
+  loadDriverOfferProfileGate,
+  profileGateErrorResponse,
+} from '@/lib/driver/offer-eligibility';
 import { startRiderAutoMatch } from '@/lib/rider/assignment';
 import { sendRiderNotification } from '@/lib/rider/notifications';
 
@@ -71,6 +75,18 @@ export async function POST(request: NextRequest) {
 
     if (!tripId) {
       return NextResponse.json({ error: 'tripId is required.' }, { status: 400 });
+    }
+
+    let profileGate;
+    try {
+      profileGate = await loadDriverOfferProfileGate(admin, auth.user.id);
+    } catch (gateErr: unknown) {
+      const message = gateErr instanceof Error ? gateErr.message : 'Profile not found.';
+      return NextResponse.json({ error: message }, { status: 404 });
+    }
+
+    if (!profileGate.isComplete) {
+      return NextResponse.json(profileGateErrorResponse(profileGate), { status: 403 });
     }
 
     const { data: profile, error: profileError } = await loadDriverProfile(admin, auth.user.id);

@@ -15,6 +15,9 @@ import TripMapPreview from '@/components/TripMapPreview';
 import OrganizationLogo from '../../components/OrganizationLogo';
 import { truncateLocation } from '@/lib/rider/format';
 import { toDateInputValue } from '@/lib/driver/document-dates';
+import ProfileCompletionOfferGate from '@/components/driver/ProfileCompletionOfferGate';
+import { PROFILE_INCOMPLETE_OFFER_MESSAGE } from '@/lib/driver/offer-eligibility';
+import { useProfileCompletion } from '@/lib/driver/useProfileCompletion';
 
 interface Trip {
   id: string;
@@ -40,6 +43,12 @@ interface ExistingOffer {
 }
 
 export default function BrowseTrips() {
+  const {
+    profileCompletion,
+    isProfileComplete,
+    incompleteSteps,
+    refresh: refreshProfileCompletion,
+  } = useProfileCompletion();
   const [trips, setTrips] = useState<Trip[]>([]);
   const [existingOffers, setExistingOffers] = useState<Record<string, ExistingOffer>>({});
   const [loading, setLoading] = useState(true);
@@ -207,8 +216,9 @@ export default function BrowseTrips() {
   }, [fetchExistingOffers]);
 
   useEffect(() => {
-    fetchOpenTrips();
-  }, [fetchOpenTrips]);
+    void fetchOpenTrips();
+    void refreshProfileCompletion();
+  }, [fetchOpenTrips, refreshProfileCompletion]);
 
   const openDetails = (trip: Trip) => {
     setSelectedTrip(trip);
@@ -225,8 +235,9 @@ export default function BrowseTrips() {
     setSubmitError(null);
   };
 
-  const offerEligibility = driverSeating ? canDriverSubmitOffers(driverSeating) : null;
-  const canSubmitOffers = offerEligibility?.ok ?? false;
+  const seatingEligibility = driverSeating ? canDriverSubmitOffers(driverSeating) : null;
+  const canSubmitOffers =
+    isProfileComplete && (seatingEligibility?.ok ?? false);
 
   const tripCapacityOk = (trip: Trip) =>
     driverSeating
@@ -235,6 +246,11 @@ export default function BrowseTrips() {
 
   const submitOffer = async () => {
     if (!selectedTrip) return;
+
+    if (!isProfileComplete) {
+      setSubmitError(PROFILE_INCOMPLETE_OFFER_MESSAGE);
+      return;
+    }
 
     if (driverSeating) {
       const globalCheck = canDriverSubmitOffers(driverSeating);
@@ -351,10 +367,19 @@ export default function BrowseTrips() {
         </div>
       )}
 
-      {offerEligibility && !offerEligibility.ok && (
+      {!isProfileComplete && (
+        <div className="mb-6">
+          <ProfileCompletionOfferGate
+            profileCompletion={profileCompletion}
+            incompleteSteps={incompleteSteps}
+          />
+        </div>
+      )}
+
+      {isProfileComplete && seatingEligibility && !seatingEligibility.ok && (
         <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 text-sm">
           <p className="font-semibold mb-1">Offers unavailable</p>
-          <p>{offerEligibility.error}</p>
+          <p>{seatingEligibility.error}</p>
           <Link href="/dashboard/profile" className="inline-block mt-2 text-[#1E3A8A] font-medium hover:underline">
             Go to Profile →
           </Link>
@@ -542,7 +567,11 @@ export default function BrowseTrips() {
                       onClick={() => openDetails(trip)}
                       className="shrink-0 px-5 py-2.5 bg-[#1E3A8A] hover:bg-blue-900 active:bg-blue-950 text-white rounded-xl text-sm font-semibold shadow-sm transition"
                     >
-                      {existing ? 'View Trip' : 'View Details & Offer'}
+                      {existing
+                        ? 'View Trip'
+                        : isProfileComplete
+                          ? 'View Details & Offer'
+                          : 'View Details'}
                     </button>
                   </div>
                 </div>
@@ -635,6 +664,12 @@ export default function BrowseTrips() {
                     View in My Offers →
                   </Link>
                 </div>
+              ) : !isProfileComplete ? (
+                <ProfileCompletionOfferGate
+                  profileCompletion={profileCompletion}
+                  incompleteSteps={incompleteSteps}
+                  compact
+                />
               ) : (
                 <>
                   <div className="pt-4 border-t">
@@ -684,7 +719,7 @@ export default function BrowseTrips() {
               >
                 Close
               </button>
-              {!existingOffers[selectedTrip.id] && (
+              {!existingOffers[selectedTrip.id] && isProfileComplete && (
                 <button
                   onClick={submitOffer}
                   disabled={

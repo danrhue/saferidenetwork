@@ -13,12 +13,16 @@ import { supabase } from '@/lib/supabase';
 import {
   buildDocumentCompletionContext,
   getDriverCompletionPercent,
+  getIncompleteWizardSteps,
+  type IncompleteWizardStep,
 } from '@/lib/driver/profile-completion';
 import type { WizardCompletionContext } from '@/lib/driver/wizard-steps';
 import type { RequiredDocument } from '@/lib/driver/required-documents';
 
 type ProfileCompletionContextValue = {
   profileCompletion: number;
+  isProfileComplete: boolean;
+  incompleteSteps: IncompleteWizardStep[];
   documentsApproved: number;
   totalDocuments: number;
   documentContext: WizardCompletionContext;
@@ -37,6 +41,7 @@ export function ProfileCompletionProvider({ children }: { children: ReactNode })
     documentsUploaded: 0,
     documentsRequired: 0,
   });
+  const [incompleteSteps, setIncompleteSteps] = useState<IncompleteWizardStep[]>([]);
 
   const refresh = useCallback(async () => {
     const {
@@ -85,8 +90,11 @@ export function ProfileCompletionProvider({ children }: { children: ReactNode })
       docs.filter((d) => d.status === 'approved').map((d) => d.document_type)
     ).size;
 
+    const percent = getDriverCompletionPercent(profileData, ctx);
+
     setDocumentContext(ctx);
-    setProfileCompletion(getDriverCompletionPercent(profileData, ctx));
+    setProfileCompletion(percent);
+    setIncompleteSteps(getIncompleteWizardSteps(profileData, ctx));
     setDocumentsApproved(approvedTypes);
     setTotalDocuments(required.length);
   }, []);
@@ -98,12 +106,21 @@ export function ProfileCompletionProvider({ children }: { children: ReactNode })
   const value = useMemo(
     () => ({
       profileCompletion,
+      isProfileComplete: profileCompletion === 100,
+      incompleteSteps,
       documentsApproved,
       totalDocuments,
       documentContext,
       refresh,
     }),
-    [profileCompletion, documentsApproved, totalDocuments, documentContext, refresh]
+    [
+      profileCompletion,
+      incompleteSteps,
+      documentsApproved,
+      totalDocuments,
+      documentContext,
+      refresh,
+    ]
   );
 
   return (

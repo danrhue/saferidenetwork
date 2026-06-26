@@ -1,9 +1,16 @@
 import {
   getWizardStepCompletionMap,
+  isWizardStepComplete,
   WIZARD_STEP_COUNT,
+  WIZARD_STEPS,
   type WizardCompletionContext,
 } from '@/lib/driver/wizard-steps';
 import type { PersonalProfile } from '@/lib/driver/onboarding-completion';
+
+export type IncompleteWizardStep = {
+  id: number;
+  title: string;
+};
 
 export type DriverDocumentCompletionInput = {
   document_type: string;
@@ -37,4 +44,22 @@ export function getDriverCompletionPercent(
   const steps = getWizardStepCompletionMap(profile, ctx);
   const filled = steps.filter(Boolean).length;
   return Math.round((filled / WIZARD_STEP_COUNT) * 100);
+}
+
+/** True when every wizard step (profile + compliance) is complete. */
+export function isDriverProfileComplete(
+  profile: PersonalProfile,
+  ctx: WizardCompletionContext
+): boolean {
+  return getDriverCompletionPercent(profile, ctx) === 100;
+}
+
+/** Wizard steps still needed before the driver can submit trip offers. */
+export function getIncompleteWizardSteps(
+  profile: PersonalProfile,
+  ctx: WizardCompletionContext
+): IncompleteWizardStep[] {
+  return WIZARD_STEPS.filter(
+    (step) => !isWizardStepComplete(step.id, profile, ctx)
+  ).map((step) => ({ id: step.id, title: step.title }));
 }
