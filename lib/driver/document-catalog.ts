@@ -101,6 +101,7 @@ export const DEFAULT_DOCUMENT_TYPES = [
   'accident_prevention_course',
   'tb_test',
   'cpr_training',
+  'first_aid_cpr_aed',
   'first_aid_training',
   'defensive_driving',
   'safety_meetings',
@@ -287,6 +288,17 @@ export const DRIVER_DOCUMENT_CATALOG: Record<string, RequiredDocument> = {
     cost: 'Driver is responsible for the cost',
     description:
       'Upload proof of current CPR certification from an accredited provider. Renewal is typically required every 2 years.',
+    validityYears: 2,
+    uploadable: true,
+    requiresExpiration: true,
+  },
+  first_aid_cpr_aed: {
+    type: 'first_aid_cpr_aed',
+    label: 'First Aid & CPR/AED Certification',
+    category: 'training',
+    cost: 'Driver is responsible for the cost',
+    description:
+      'First Aid & CPR/AED Certification\n\nRequired\n\nYou must hold a current First Aid and CPR/AED certification from an approved provider. This training ensures you can respond to medical emergencies while transporting passengers.\n\nAccepted Providers & Courses:\n• American Red Cross — Adult First Aid/CPR/AED (Online or Blended) — https://www.redcross.org/take-a-class/classes/adult-first-aid%2Fcpr%2Faed-online/a6RVx000000Xi3t.html\n• American Heart Association — Heartsaver First Aid CPR AED (Online + Skills Session) — https://shopcpr.heart.org/heartsaver-first-aid-cpr-aed-online\n• National Safety Council (NSC) — First Aid, CPR & AED — Available through NSC authorized providers\n• HSI / American Safety & Health Institute (ASHI) — First Aid + CPR/AED — Available through HSI online and approved training centers\n\nImportant Notes:\n• The course must include both First Aid and CPR/AED.\n• Some courses are fully online, while others require a hands-on skills session.\n• Certification is typically valid for 2 years.\n\nUpload your current certificate once completed.',
     validityYears: 2,
     uploadable: true,
     requiresExpiration: true,

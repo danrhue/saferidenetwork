@@ -76,6 +76,7 @@ CROSS JOIN (
     ('accident_prevention_course', 100),
     ('tb_test', 110),
     ('cpr_training', 120),
+    ('first_aid_cpr_aed', 125),
     ('first_aid_training', 130),
     ('defensive_driving', 140),
     ('safety_meetings', 150)
