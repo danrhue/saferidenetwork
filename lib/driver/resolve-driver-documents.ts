@@ -11,6 +11,7 @@ export type StateRequirementRow = {
   document_type: string;
   sort_order: number;
   is_required: boolean;
+  description?: string | null;
 };
 
 /**
@@ -67,11 +68,33 @@ export function getAllCatalogDocuments(): RequiredDocument[] {
   return resolveRequiredDocuments(Object.keys(DRIVER_DOCUMENT_CATALOG));
 }
 
+function mergeStateDescriptions(
+  documents: RequiredDocument[],
+  stateRows: StateRequirementRow[],
+  drivingStates: string[]
+): RequiredDocument[] {
+  const states = new Set(normalizeStateCodes(drivingStates));
+  const descriptionByType = new Map<string, string>();
+
+  for (const row of stateRows) {
+    if (!states.has(row.state_code.toUpperCase()) || !row.description?.trim()) continue;
+    if (!descriptionByType.has(row.document_type)) {
+      descriptionByType.set(row.document_type, row.description.trim());
+    }
+  }
+
+  return documents.map((doc) => ({
+    ...doc,
+    description: descriptionByType.get(doc.type) ?? doc.description,
+  }));
+}
+
 export function resolveRequiredDocumentsForStates(
   drivingStates: string[],
   stateRows: StateRequirementRow[]
 ): RequiredDocument[] {
   const types = unionDocumentTypesFromStateRows(stateRows, drivingStates);
   if (types.length === 0) return [];
-  return resolveRequiredDocuments(types);
+  const documents = resolveRequiredDocuments(types);
+  return mergeStateDescriptions(documents, stateRows, drivingStates);
 }

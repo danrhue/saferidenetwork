@@ -42,6 +42,20 @@ export const DRIVER_DOCUMENT_CATALOG: Record<string, RequiredDocument> = {
     requiresExpiration: true,
     validityYears: 4,
   },
+  ssn_card: {
+    type: 'ssn_card',
+    label: 'SSN Card',
+    cost: 'No cost',
+    uploadable: true,
+    description: 'Upload a copy of your Social Security card for identity verification.',
+  },
+  birth_certificate_passport: {
+    type: 'birth_certificate_passport',
+    label: 'Birth Certificate / Passport',
+    cost: 'No cost',
+    uploadable: true,
+    description: 'Upload a copy of your birth certificate or passport for identity verification.',
+  },
   proof_of_insurance: {
     type: 'proof_of_insurance',
     label: 'Proof of Insurance',
@@ -86,11 +100,23 @@ export const DRIVER_DOCUMENT_CATALOG: Record<string, RequiredDocument> = {
     uploadable: true,
     specialNote: 'Upload results when received',
   },
+  driving_record: {
+    type: 'driving_record',
+    label: 'Driving Record (MVR)',
+    cost: 'Driver may be responsible for the cost',
+    uploadable: true,
+    requiresExpiration: true,
+    validityYears: 1,
+    description: 'Upload a current motor vehicle record from your state DMV.',
+  },
   saferide_course: {
     type: 'saferide_course',
     label: 'SafeRide Course',
-    cost: 'Driver is responsible for the cost',
+    cost: '$25 (paid by you)',
     uploadable: true,
+    description:
+      'You must complete the SafeRide training course before driving.\nCost: $25 (paid by you)\n\nHow to complete:\nGo to https://everdriven.talentlms.com/\nClick Signup in the upper right.\nCreate your account and log in.\nClick Get your first course.\nSelect the course that matches your language and vehicle type.\n\nNote: The wheelchair accessible vehicle course also covers non-wheelchair vehicles (it just has one extra module).',
+    specialNote: 'Upload your completion certificate after finishing the course on TalentLMS.',
   },
   dot_physical: {
     type: 'dot_physical',
@@ -142,6 +168,15 @@ export const DRIVER_DOCUMENT_CATALOG: Record<string, RequiredDocument> = {
     validityYears: 2,
     uploadable: true,
     requiresExpiration: true,
+  },
+  child_seat_training: {
+    type: 'child_seat_training',
+    label: 'Child Seat Training',
+    cost: 'Driver is responsible for the cost',
+    uploadable: true,
+    requiresExpiration: true,
+    validityYears: 2,
+    description: 'Upload proof of child passenger safety / car seat installation training.',
   },
   safety_meetings: {
     type: 'safety_meetings',

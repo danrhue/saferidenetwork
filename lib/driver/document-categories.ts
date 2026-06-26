@@ -3,6 +3,7 @@ import type { RequiredDocument } from '@/lib/driver/required-documents';
 export type DocumentCategory = {
   id: string;
   title: string;
+  examples: string;
   description: string;
   types: readonly string[];
 };
@@ -11,36 +12,42 @@ export const DOCUMENT_CATEGORIES: DocumentCategory[] = [
   {
     id: 'licensing',
     title: 'Licensing & Identification',
-    description: 'Identity and driving credentials',
-    types: ['drivers_license', 'english_language_proficiency'],
+    examples: "Driver's License, SSN Card, Birth Certificate / Passport",
+    description: 'Core ID documents',
+    types: ['drivers_license', 'ssn_card', 'birth_certificate_passport'],
   },
   {
     id: 'vehicle',
     title: 'Vehicle Requirements',
-    description: 'Insurance, registration, and vehicle compliance',
-    types: [
-      'proof_of_insurance',
-      'vehicle_registration',
-      'vehicle_inspection',
-      'dot_physical',
-    ],
+    examples: 'Vehicle Registration, Proof of Insurance, Vehicle Inspection',
+    description: 'Vehicle-related docs',
+    types: ['vehicle_registration', 'proof_of_insurance', 'vehicle_inspection'],
   },
   {
     id: 'compliance',
     title: 'Compliance & Background',
-    description: 'Background checks, health screening, and compliance',
-    types: ['background_check_fingerprinting', 'drug_test', 'tb_test'],
+    examples: 'DOT Physical, Background Check, Drug Test, Driving Record',
+    description: 'Safety & compliance',
+    types: [
+      'dot_physical',
+      'background_check_fingerprinting',
+      'drug_test',
+      'driving_record',
+      'tb_test',
+    ],
   },
   {
     id: 'training',
     title: 'Training & Certifications',
-    description: 'Courses, certifications, and safety training',
+    examples: 'SafeRide Course, First Aid/CPR, Defensive Driving, Child Seat Training',
+    description: 'Required training',
     types: [
       'saferide_course',
-      'accident_prevention_course',
       'cpr_training',
       'first_aid_training',
       'defensive_driving',
+      'child_seat_training',
+      'accident_prevention_course',
       'safety_meetings',
     ],
   },
@@ -48,8 +55,9 @@ export const DOCUMENT_CATEGORIES: DocumentCategory[] = [
 
 const OTHER_CATEGORY: DocumentCategory = {
   id: 'other',
-  title: 'Other Requirements',
-  description: 'Additional state-specific requirements',
+  title: 'Other',
+  examples: 'State-specific or additional requirements',
+  description: 'Catch-all',
   types: [],
 };
 

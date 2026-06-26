@@ -60,6 +60,44 @@ function statusBadgeClass(label: string): string {
   return 'bg-gray-50 text-gray-600 border-gray-200';
 }
 
+function renderLineWithLinks(line: string, key: string) {
+  const parts = line.split(/(https:\/\/[^\s]+)/g);
+
+  return (
+    <p key={key}>
+      {parts.map((part, index) =>
+        part.startsWith('https://') ? (
+          <a
+            key={`${key}-${index}`}
+            href={part}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="break-all font-medium text-[#1E3A8A] hover:underline"
+          >
+            {part}
+          </a>
+        ) : (
+          <span key={`${key}-${index}`}>{part}</span>
+        )
+      )}
+    </p>
+  );
+}
+
+function DocumentDescription({ text }: { text: string }) {
+  return (
+    <div className="mt-2 space-y-1.5 text-sm leading-relaxed text-gray-600">
+      {text.split('\n').map((line, index) =>
+        line.trim() === '' ? (
+          <div key={index} className="h-1" aria-hidden />
+        ) : (
+          renderLineWithLinks(line, String(index))
+        )
+      )}
+    </div>
+  );
+}
+
 function ExpirySaveIndicator({
   status,
   error,
@@ -123,11 +161,7 @@ export default function DriverDocumentCard({
           </span>
         </div>
 
-        {doc.description && (
-          <p className="mt-2 line-clamp-3 text-sm leading-relaxed text-gray-600">
-            {doc.description}
-          </p>
-        )}
+        {doc.description && <DocumentDescription text={doc.description} />}
 
         <div className="mt-3 space-y-1 text-xs text-gray-500">
           <p>
