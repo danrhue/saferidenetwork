@@ -24,3 +24,126 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+.legal-prose h2 {
+  margin-top: 2.5rem;
+  margin-bottom: 1rem;
+  font-size: 1.5rem;
+  line-height: 2rem;
+  font-weight: 600;
+  color: #172554;
+}
+
+.legal-prose h2:first-child {
+  margin-top: 0;
+}
+
+.legal-prose h3 {
+  margin-top: 1.5rem;
+  margin-bottom: 0.75rem;
+  font-size: 1.125rem;
+  line-height: 1.75rem;
+  font-weight: 600;
+  color: #172554;
+}
+
+.legal-prose p {
+  margin-bottom: 1rem;
+  line-height: 1.75;
+  color: #1e3a8a;
+}
+
+.legal-prose ul,
+.legal-prose ol {
+  margin-bottom: 1rem;
+  padding-left: 1.5rem;
+  color: #1e3a8a;
+}
+
+.legal-prose ul {
+  list-style-type: disc;
+}
+
+.legal-prose ol {
+  list-style-type: decimal;
+}
+
+.legal-prose li {
+  margin-bottom: 0.5rem;
+  line-height: 1.75;
+}
+
+.legal-prose a {
+  color: #1e3a8a;
+  font-weight: 500;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.legal-prose a:hover {
+  color: #1e40af;
+}
+
+.legal-prose strong {
+  font-weight: 600;
+  color: #172554;
+}
+
+.legal-prose .faq-item {
+  margin-bottom: 2rem;
+  padding-bottom: 2rem;
+  border-bottom: 1px solid #dbeafe;
+}
+
+.legal-prose .faq-item:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+  padding-bottom: 0;
+}
+
+/* SafeRide Network header — no-wrap / no-overlap fallback */
+.sr-header {
+  isolation: isolate;
+}
+
+.sr-header a,
+.sr-header button,
+.sr-header span,
+.sr-header p {
+  white-space: nowrap;
+}
+
+.sr-desktop-nav {
+  flex-wrap: nowrap;
+  flex-shrink: 0;
+}
+
+/* Logo column stays above nav if widths collide */
+.sr-header > div > div > a:first-of-type {
+  position: relative;
+  z-index: 10;
+  flex-shrink: 0;
+}
+
+@media (min-width: 1024px) {
+  .sr-desktop-nav {
+    display: flex;
+    margin-left: auto;
+  }
+
+  .sr-mobile-menu {
+    display: none !important;
+  }
+}
+
+@media (max-width: 1023px) {
+  .sr-desktop-nav {
+    display: none !important;
+  }
+}
+
+/* Mobile drawer links may wrap labels naturally in full-width rows */
+.sr-mobile-menu a,
+.sr-mobile-menu p {
+  white-space: normal;
+}

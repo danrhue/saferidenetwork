@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/rider/assignment/finalize",
+      "schedule": "0 12 * * *"
+    }
+  ]
+}
