@@ -2,12 +2,12 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
+import DocumentCategorySection from '@/components/driver/DocumentCategorySection';
 import DriverDocumentCard, {
   type DriverDocumentRecord,
 } from '@/components/driver/DriverDocumentCard';
-import {
-  findDriverDocument,
-} from '@/lib/driver/required-documents';
+import { groupDocumentsByCategory } from '@/lib/driver/document-categories';
+import { findDriverDocument } from '@/lib/driver/required-documents';
 import { toDateInputValue } from '@/lib/driver/document-dates';
 import { useRequiredDriverDocuments } from '@/lib/driver/useRequiredDriverDocuments';
 import { useProfileCompletion } from '@/lib/driver/useProfileCompletion';
@@ -247,16 +247,21 @@ export default function DriverDocumentsPage() {
   const progress =
     totalRequired > 0 ? Math.round((approvedCount / totalRequired) * 100) : 0;
 
+  const groupedCategories = groupDocumentsByCategory(requiredDocuments);
+
+  const getCategoryApprovedCount = (types: string[]) =>
+    types.filter((type) => approvedTypes.has(type)).length;
+
   if (requirementsLoading) {
     return (
-      <div className="mx-auto flex max-w-3xl items-center justify-center px-4 py-20">
+      <div className="mx-auto flex max-w-7xl items-center justify-center px-4 py-20">
         <p className="font-medium text-blue-950">Loading document requirements…</p>
       </div>
     );
   }
 
   return (
-    <div className="mx-auto max-w-3xl px-4 pb-12 sm:px-0">
+    <div className="mx-auto max-w-7xl px-4 pb-12 sm:px-6 lg:px-8">
       <header className="mb-8">
         <h1 className="text-3xl font-bold text-blue-950">My Documents</h1>
         <p className="mt-2 text-gray-600">
@@ -309,29 +314,37 @@ export default function DriverDocumentsPage() {
         </div>
       </section>
 
-      <div className="space-y-5">
-        {requiredDocuments.map((doc) => {
-          const existing = findDriverDocument(documents, doc.type);
-          const expiryValue =
-            expiryDates[doc.type] ||
-            (existing?.expires_at ? toDateInputValue(existing.expires_at) : '');
+      <div className="space-y-12">
+        {groupedCategories.map((category) => (
+          <DocumentCategorySection
+            key={category.id}
+            category={category}
+            approvedCount={getCategoryApprovedCount(category.documents.map((doc) => doc.type))}
+          >
+            {category.documents.map((doc) => {
+              const existing = findDriverDocument(documents, doc.type);
+              const expiryValue =
+                expiryDates[doc.type] ||
+                (existing?.expires_at ? toDateInputValue(existing.expires_at) : '');
 
-          return (
-            <DriverDocumentCard
-              key={doc.type}
-              doc={doc}
-              existing={existing}
-              expiryValue={expiryValue}
-              expirySaveStatus={expirySaveStatus[doc.type] ?? 'idle'}
-              expirySaveError={expirySaveError[doc.type]}
-              isUploading={uploading === doc.type}
-              onExpiryChange={(value) => handleExpiryChange(doc.type, value)}
-              onExpiryBlur={() => handleExpiryBlur(doc.type)}
-              onUpload={(event) => void handleUpload(doc.type, event)}
-              onPreview={setPreviewUrl}
-            />
-          );
-        })}
+              return (
+                <DriverDocumentCard
+                  key={doc.type}
+                  doc={doc}
+                  existing={existing}
+                  expiryValue={expiryValue}
+                  expirySaveStatus={expirySaveStatus[doc.type] ?? 'idle'}
+                  expirySaveError={expirySaveError[doc.type]}
+                  isUploading={uploading === doc.type}
+                  onExpiryChange={(value) => handleExpiryChange(doc.type, value)}
+                  onExpiryBlur={() => handleExpiryBlur(doc.type)}
+                  onUpload={(event) => void handleUpload(doc.type, event)}
+                  onPreview={setPreviewUrl}
+                />
+              );
+            })}
+          </DocumentCategorySection>
+        ))}
       </div>
 
       {requiredDocuments.length === 0 && drivingStates.length > 0 && (
